@@ -11,12 +11,14 @@ use crate::session::BrowserSession;
 use crate::srt_sender::SrtConfig;
 use crate::stream_registry::{StreamRegistry, StreamStats};
 use anyhow::Result;
+use parking_lot::Mutex as StdMutex;
 use std::future::Future;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc;
 use tokio::sync::Notify;
+use wtransport::endpoint::IncomingSession;
 use wtransport::Endpoint;
 use wtransport::Identity;
 use wtransport::ServerConfig;
@@ -192,6 +194,16 @@ impl Gateway {
     }
 
     /// Run the WebTransport accept loop until `shutdown` completes.
+    ///
+    /// The loop itself only ever awaits `server.accept()` and `shutdown`.
+    /// ALL per-session handling — policy decision, rejects, connection-limit
+    /// guard, routing checks, WT accept handshake, session creation — runs in
+    /// a spawned task per incoming connection (`handle_session`), so
+    /// concurrent handshakes proceed in parallel and a single slow or
+    /// abandoned handshake cannot stall the others. This matters because
+    /// wtransport's reject path (`SessionRequest::not_found` et al.) awaits
+    /// the client resetting the request stream, which a misbehaving client
+    /// can withhold indefinitely.
     pub async fn run(self, shutdown: impl Future<Output = ()>) -> Result<()> {
         use std::sync::Arc;
         use wtransport::quinn::TransportConfig;
@@ -218,7 +230,14 @@ impl Gateway {
         // each SessionEntry and released on session exit.
         let tracker = Arc::new(ConnectionTracker::new(self.limits.clone()));
 
-        let mut session_handles: Vec<(Arc<Notify>, tokio::task::JoinHandle<()>)> = Vec::new();
+        // Shared bookkeeping between the accept loop and the per-session
+        // handler tasks: the accept loop records in-flight handler tasks;
+        // each handler registers its session's (shutdown, recv_pump handle)
+        // pair once the session is created. `shutting_down` gates late
+        // registrations — handlers that finish after the drain list has
+        // been taken tear their session down themselves. Pruned on each
+        // accept; never locked across an `.await`.
+        let tasks: Arc<StdMutex<SessionTasks>> = Arc::new(StdMutex::new(SessionTasks::default()));
 
         // Centralized session registry + ticker. ONE ticker task drives all
         // sessions' SRT state machines (~2ms cadence).
@@ -236,6 +255,12 @@ impl Gateway {
             .await;
         });
 
+        // Per-session handler inputs, cloned into each spawned task.
+        let policy = self.policy.clone();
+        let streams = self.streams.clone();
+        let srt_config = self.srt_config.clone();
+        let handshake_timeout = self.limits.handshake_timeout;
+
         tokio::pin!(shutdown);
 
         loop {
@@ -245,212 +270,22 @@ impl Gateway {
                     break;
                 }
                 incoming_session = server.accept() => {
-                    let session_request = match incoming_session.await {
-                        Ok(req) => req,
-                        Err(e) => {
-                            tracing::warn!(?e, "incoming session failed");
-                            continue;
-                        }
-                    };
-
-                    let request_path = session_request.path();
-                    let (path_only, query) = match request_path.find('?') {
-                        Some(idx) => (&request_path[..idx], &request_path[idx + 1..]),
-                        None => (request_path, ""),
-                    };
-
-                    tracing::info!(
-                        path = path_only,
-                        authority = session_request.authority(),
-                        "WT session request"
-                    );
-
-                    // Build a SessionRequest and ask the policy.
-                    let origin_header = session_request.origin();
-                    let session_req = crate::hooks::SessionRequest {
-                        path: path_only,
-                        query,
-                        origin: origin_header,
-                        authority: session_request.authority(),
-                        user_agent: session_request.user_agent(),
-                        headers: session_request.headers(),
-                        remote_address: session_request.remote_address(),
-                    };
-                    match self.policy.decide(&session_req).await {
-                        crate::hooks::Decision::Accept => {}
-                        crate::hooks::Decision::Reject => {
-                            tracing::info!(
-                                path = path_only,
-                                origin = ?origin_header,
-                                "session rejected by policy (404)"
-                            );
-                            session_request.not_found().await;
-                            continue;
-                        }
-                        crate::hooks::Decision::Forbidden => {
-                            tracing::info!(
-                                path = path_only,
-                                origin = ?origin_header,
-                                "session rejected by policy (403)"
-                            );
-                            session_request.forbidden().await;
-                            continue;
-                        }
-                        crate::hooks::Decision::TooManyRequests => {
-                            tracing::info!(
-                                path = path_only,
-                                origin = ?origin_header,
-                                "session rejected by policy (429)"
-                            );
-                            session_request.too_many_requests().await;
-                            continue;
-                        }
-                    }
-
-                    // Connection limit check (per-IP + global).
-                    let peer_ip = session_req.remote_address.ip();
-                    let guard = match tracker.try_acquire(peer_ip) {
-                        Some(g) => g,
-                        None => {
-                            tracing::warn!(
-                                ip = %peer_ip,
-                                total = tracker.total(),
-                                per_ip = tracker.per_ip(&peer_ip),
-                                "session rejected: connection limit exceeded"
-                            );
-                            session_request.too_many_requests().await;
-                            continue;
-                        }
-                    };
-
-                    // Parse stream routing from query params.
-                    //   ?stream=<name> or ?subscribe=<name> → view this stream
-                    //   ?publish=<name>                     → publish this stream
-                    // A session may both publish and view (different streams).
-                    let stream_name = crate::hooks::parse_query_param(query, "stream")
-                        .or_else(|| crate::hooks::parse_query_param(query, "subscribe"))
-                        .unwrap_or_else(|| "default".to_string());
-                    let publish_name = crate::hooks::parse_query_param(query, "publish");
-
-                    // Pre-accept checks, to avoid a wasted WT handshake:
-                    // - Viewer-only sessions: reject (404) if the requested
-                    //   stream isn't available (no source yet, or ended).
-                    // - Publishing sessions: reject (403) if the publish name
-                    //   is already held by a live broadcaster — first-wins;
-                    //   an incumbent stream (from any source type) cannot be
-                    //   replaced from the browser. Combined ?publish=X&stream=Y
-                    //   sessions are rejected entirely when X is taken.
-                    match &publish_name {
-                        None => {
-                            if !self.streams.is_alive(&stream_name) {
-                                tracing::warn!(stream = %stream_name, "session rejected: stream not available");
-                                session_request.not_found().await;
-                                continue;
-                            }
-                        }
-                        Some(pub_name) => {
-                            if self.streams.is_alive(pub_name) {
-                                tracing::warn!(stream = %pub_name, "session rejected: stream name in use");
-                                session_request.forbidden().await;
-                                continue;
-                            }
-                        }
-                    }
-
-                    let connection = match tokio::time::timeout(
-                        self.limits.handshake_timeout,
-                        session_request.accept(),
-                    ).await {
-                        Ok(Ok(c)) => c,
-                        Ok(Err(e)) => {
-                            tracing::warn!(?e, "accept failed");
-                            continue;
-                        }
-                        Err(_) => {
-                            tracing::warn!("handshake timed out after {:?}", self.limits.handshake_timeout);
-                            continue;
-                        }
-                    };
-
-                    let peer = connection.remote_address();
-                    tracing::info!(%peer, "WT session established");
-
-                    match connection.max_datagram_size() {
-                        Some(max) if max >= 1200 => {
-                            tracing::debug!(max, "WT datagram PMTU adequate");
-                        }
-                        Some(max) => {
-                            tracing::warn!(
-                                max,
-                                required = 1200,
-                                "WT datagram PMTU too small; closing session"
-                            );
-                            connection.close(
-                                1u32.into(),
-                                b"datagram PMTU too small for SRT payload",
-                            );
-                            continue;
-                        }
-                        None => {
-                            tracing::warn!("WT datagrams unsupported by peer; closing session");
-                            connection.close(1u32.into(), b"datagrams unsupported");
-                            continue;
-                        }
-                    }
-
-                    // Resolve the viewer subscription and/or publish channel
-                    // after a successful accept + PMTU check. `subscribe()`
-                    // re-checks alive + per-stream cap atomically; if it fails
-                    // now (source died or cap filled between the pre-check and
-                    // here) close the just-accepted connection rather than
-                    // leaking it.
-                    let (viewer, publish_tx) = match &publish_name {
-                        Some(pub_name) => {
-                            // Publishing session: claim the stream name.
-                            // `try_publish` re-checks occupancy atomically —
-                            // a challenger that raced past the pre-accept
-                            // check (another publisher claimed the name
-                            // during the handshake window) is closed here.
-                            let Some(tx) = self.streams.try_publish(pub_name) else {
-                                tracing::warn!(
-                                    stream = %pub_name,
-                                    "post-accept publish claim failed; closing session"
-                                );
-                                connection.close(1u32.into(), b"stream name in use");
-                                continue;
-                            };
-                            // Optionally also view a different stream.
-                            let view = if pub_name.as_str() != stream_name.as_str() {
-                                self.streams.subscribe(&stream_name)
-                            } else {
-                                None
-                            };
-                            (view, Some(tx))
-                        }
-                        None => match self.streams.subscribe(&stream_name) {
-                            Some(v) => (Some(v), None),
-                            None => {
-                                tracing::warn!(
-                                    stream = %stream_name,
-                                    "post-accept subscribe failed; closing session"
-                                );
-                                connection.close(1u32.into(), b"stream not found");
-                                continue;
-                            }
-                        },
-                    };
-
-                    let (entry, handle) = BrowserSession::create(
-                        connection, viewer,
-                        self.sim_loss, self.sim_seed, self.srt_config.clone(),
-                        publish_tx,
-                        Some(guard),
-                        stream_name.clone(),
-                    ).await;
-                    let session_shutdown = entry.shutdown.clone();
-                    registry.insert(entry);
-                    session_handles.retain(|(_, h)| !h.is_finished());
-                    session_handles.push((session_shutdown, handle));
+                    let handler = tokio::spawn(handle_session(
+                        incoming_session,
+                        policy.clone(),
+                        tracker.clone(),
+                        streams.clone(),
+                        registry.clone(),
+                        srt_config.clone(),
+                        self.sim_loss,
+                        self.sim_seed,
+                        handshake_timeout,
+                        tasks.clone(),
+                    ));
+                    let mut t = tasks.lock();
+                    t.in_flight.retain(|h| !h.is_finished());
+                    t.handles.retain(|(_, h)| !h.is_finished());
+                    t.in_flight.push(handler);
                 }
             }
         }
@@ -462,6 +297,24 @@ impl Gateway {
         ticker_shutdown.notify_one();
         let _ = tokio::time::timeout(Duration::from_secs(2), ticker_handle).await;
 
+        // Close the registration window and abort handlers still working a
+        // handshake. They hold no session state yet; their RAII guards
+        // (connection slots, publish claims) release on drop. Handlers that
+        // already registered a session see `shutting_down` and tear it down
+        // themselves instead.
+        let (handles, in_flight) = {
+            let mut t = tasks.lock();
+            t.shutting_down = true;
+            (
+                std::mem::take(&mut t.handles),
+                std::mem::take(&mut t.in_flight),
+            )
+        };
+        for handler in in_flight {
+            handler.abort();
+            let _ = handler.await;
+        }
+
         // Signal all broadcasters to shut down so ingesters stuck in reconnect
         // loops (e.g. `SrtIngester`) exit and release bound resources before
         // sessions are torn down. Awaits task exit (bounded by per-broadcaster
@@ -471,7 +324,6 @@ impl Gateway {
 
         // Graceful drain: signal each session's shutdown Notify, wait up to
         // 3s for it to exit on its own, then fall back to abort.
-        let handles = std::mem::take(&mut session_handles);
         if !handles.is_empty() {
             tracing::info!(count = handles.len(), "shutting down active sessions");
             // Signal graceful shutdown
@@ -502,6 +354,278 @@ impl Gateway {
 
         Ok(())
     }
+}
+
+/// Bookkeeping shared between the accept loop and the per-session handler
+/// tasks (see [`Gateway::run`]). Guarded by a `parking_lot::Mutex` that is
+/// never held across an `.await`.
+#[derive(Default)]
+struct SessionTasks {
+    /// Set once shutdown begins; handlers that finish creating a session
+    /// after this tear it down themselves instead of registering.
+    shutting_down: bool,
+    /// Registered sessions: shutdown Notify + recv_pump join handle, for
+    /// `Gateway::run`'s graceful drain.
+    handles: Vec<(Arc<Notify>, tokio::task::JoinHandle<()>)>,
+    /// Handler tasks still working their session (handshake in progress).
+    in_flight: Vec<tokio::task::JoinHandle<()>>,
+}
+
+/// Per-session handling: everything between an `IncomingSession` arriving
+/// and a registered, ticker-driven [`BrowserSession`]. Spawned one per
+/// incoming connection by the accept loop so each WT handshake proceeds
+/// independently — a slow or abandoned handshake (or a reject awaiting the
+/// client's stream reset) cannot stall other sessions.
+///
+/// Reject responses are bounded by `handshake_timeout`: wtransport's reject
+/// path awaits the client resetting the request stream, so an abandoned
+/// handshake must not hold this task (and its connection slot) forever.
+/// Well-behaved clients reset promptly and see no difference.
+async fn handle_session(
+    incoming: IncomingSession,
+    policy: Arc<dyn crate::hooks::SessionPolicy>,
+    tracker: Arc<ConnectionTracker>,
+    streams: Arc<StreamRegistry>,
+    registry: Arc<SessionRegistry>,
+    srt_config: SrtConfig,
+    sim_loss: u8,
+    sim_seed: u64,
+    handshake_timeout: Duration,
+    tasks: Arc<StdMutex<SessionTasks>>,
+) {
+    let session_request = match incoming.await {
+        Ok(req) => req,
+        Err(e) => {
+            tracing::warn!(?e, "incoming session failed");
+            return;
+        }
+    };
+
+    let request_path = session_request.path();
+    let (path_only, query) = match request_path.find('?') {
+        Some(idx) => (&request_path[..idx], &request_path[idx + 1..]),
+        None => (request_path, ""),
+    };
+
+    tracing::info!(
+        path = path_only,
+        authority = session_request.authority(),
+        "WT session request"
+    );
+
+    // Build a SessionRequest and ask the policy.
+    let origin_header = session_request.origin();
+    let session_req = crate::hooks::SessionRequest {
+        path: path_only,
+        query,
+        origin: origin_header,
+        authority: session_request.authority(),
+        user_agent: session_request.user_agent(),
+        headers: session_request.headers(),
+        remote_address: session_request.remote_address(),
+    };
+    match policy.decide(&session_req).await {
+        crate::hooks::Decision::Accept => {}
+        crate::hooks::Decision::Reject => {
+            tracing::info!(
+                path = path_only,
+                origin = ?origin_header,
+                "session rejected by policy (404)"
+            );
+            let _ = tokio::time::timeout(handshake_timeout, session_request.not_found()).await;
+            return;
+        }
+        crate::hooks::Decision::Forbidden => {
+            tracing::info!(
+                path = path_only,
+                origin = ?origin_header,
+                "session rejected by policy (403)"
+            );
+            let _ = tokio::time::timeout(handshake_timeout, session_request.forbidden()).await;
+            return;
+        }
+        crate::hooks::Decision::TooManyRequests => {
+            tracing::info!(
+                path = path_only,
+                origin = ?origin_header,
+                "session rejected by policy (429)"
+            );
+            let _ =
+                tokio::time::timeout(handshake_timeout, session_request.too_many_requests()).await;
+            return;
+        }
+    }
+
+    // Connection limit check (per-IP + global).
+    let peer_ip = session_req.remote_address.ip();
+    let guard = match tracker.try_acquire(peer_ip) {
+        Some(g) => g,
+        None => {
+            tracing::warn!(
+                ip = %peer_ip,
+                total = tracker.total(),
+                per_ip = tracker.per_ip(&peer_ip),
+                "session rejected: connection limit exceeded"
+            );
+            let _ =
+                tokio::time::timeout(handshake_timeout, session_request.too_many_requests()).await;
+            return;
+        }
+    };
+
+    // Parse stream routing from query params.
+    //   ?stream=<name> or ?subscribe=<name> → view this stream
+    //   ?publish=<name>                     → publish this stream
+    // A session may both publish and view (different streams).
+    let stream_name = crate::hooks::parse_query_param(query, "stream")
+        .or_else(|| crate::hooks::parse_query_param(query, "subscribe"))
+        .unwrap_or_else(|| "default".to_string());
+    let publish_name = crate::hooks::parse_query_param(query, "publish");
+
+    // Pre-accept checks, to avoid a wasted WT handshake:
+    // - Viewer-only sessions: reject (404) if the requested
+    //   stream isn't available (no source yet, or ended).
+    // - Publishing sessions: reject (403) if the publish name
+    //   is already held by a live broadcaster — first-wins;
+    //   an incumbent stream (from any source type) cannot be
+    //   replaced from the browser. Combined ?publish=X&stream=Y
+    //   sessions are rejected entirely when X is taken.
+    match &publish_name {
+        None => {
+            if !streams.is_alive(&stream_name) {
+                tracing::warn!(stream = %stream_name, "session rejected: stream not available");
+                let _ = tokio::time::timeout(handshake_timeout, session_request.not_found()).await;
+                return;
+            }
+        }
+        Some(pub_name) => {
+            if streams.is_alive(pub_name) {
+                tracing::warn!(stream = %pub_name, "session rejected: stream name in use");
+                let _ = tokio::time::timeout(handshake_timeout, session_request.forbidden()).await;
+                return;
+            }
+        }
+    }
+
+    let connection = match tokio::time::timeout(handshake_timeout, session_request.accept()).await {
+        Ok(Ok(c)) => c,
+        Ok(Err(e)) => {
+            tracing::warn!(?e, "accept failed");
+            return;
+        }
+        Err(_) => {
+            tracing::warn!("handshake timed out after {:?}", handshake_timeout);
+            return;
+        }
+    };
+
+    let peer = connection.remote_address();
+    tracing::info!(%peer, "WT session established");
+
+    match connection.max_datagram_size() {
+        Some(max) if max >= 1200 => {
+            tracing::debug!(max, "WT datagram PMTU adequate");
+        }
+        Some(max) => {
+            tracing::warn!(
+                max,
+                required = 1200,
+                "WT datagram PMTU too small; closing session"
+            );
+            connection.close(1u32.into(), b"datagram PMTU too small for SRT payload");
+            return;
+        }
+        None => {
+            tracing::warn!("WT datagrams unsupported by peer; closing session");
+            connection.close(1u32.into(), b"datagrams unsupported");
+            return;
+        }
+    }
+
+    // Resolve the viewer subscription and/or publish channel
+    // after a successful accept + PMTU check. `subscribe()`
+    // re-checks alive + per-stream cap atomically; if it fails
+    // now (source died or cap filled between the pre-check and
+    // here) close the just-accepted connection rather than
+    // leaking it.
+    let (viewer, publish_tx) = match &publish_name {
+        Some(pub_name) => {
+            // Publishing session: claim the stream name.
+            // `try_publish` re-checks occupancy atomically —
+            // a challenger that raced past the pre-accept
+            // check (another publisher claimed the name
+            // during the handshake window) is closed here.
+            let Some(tx) = streams.try_publish(pub_name) else {
+                tracing::warn!(
+                    stream = %pub_name,
+                    "post-accept publish claim failed; closing session"
+                );
+                connection.close(1u32.into(), b"stream name in use");
+                return;
+            };
+            // Optionally also view a different stream.
+            let view = if pub_name.as_str() != stream_name.as_str() {
+                streams.subscribe(&stream_name)
+            } else {
+                None
+            };
+            (view, Some(tx))
+        }
+        None => match streams.subscribe(&stream_name) {
+            Some(v) => (Some(v), None),
+            None => {
+                tracing::warn!(
+                    stream = %stream_name,
+                    "post-accept subscribe failed; closing session"
+                );
+                connection.close(1u32.into(), b"stream not found");
+                return;
+            }
+        },
+    };
+
+    let (entry, handle) = BrowserSession::create(
+        connection,
+        viewer,
+        sim_loss,
+        sim_seed,
+        srt_config,
+        publish_tx,
+        Some(guard),
+        stream_name,
+    )
+    .await;
+    let session_shutdown = entry.shutdown.clone();
+    let session_id = registry.insert(entry);
+
+    register_session_or_drain(&tasks, &registry, session_id, session_shutdown, handle).await;
+}
+
+/// Register a just-created session for `Gateway::run`'s graceful drain. If
+/// shutdown has already taken the drain list (a race window while the
+/// handler task was creating the session), the session missed it — tear it
+/// down here instead, using the same notify → bounded wait → abort
+/// sequence the drain path uses.
+async fn register_session_or_drain(
+    tasks: &StdMutex<SessionTasks>,
+    registry: &SessionRegistry,
+    session_id: u64,
+    session_shutdown: Arc<Notify>,
+    mut handle: tokio::task::JoinHandle<()>,
+) {
+    {
+        let mut t = tasks.lock();
+        if !t.shutting_down {
+            t.handles.push((session_shutdown, handle));
+            return;
+        }
+    }
+    tracing::info!(session_id, "session created during shutdown; closing");
+    session_shutdown.notify_one();
+    let _ = tokio::time::timeout(Duration::from_secs(3), &mut handle).await;
+    handle.abort();
+    let _ = handle.await;
+    registry.remove(session_id);
 }
 
 /// Single shared ticker task that drives every active session's SRT state
