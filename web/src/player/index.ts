@@ -22,6 +22,8 @@ export interface PlayerOptions {
   renderPacing?: boolean;
   /** DTS-paced decode submission. Default false. */
   decodePacing?: boolean;
+  /** VideoDecoder hardware-acceleration preference. Default 'prefer-hardware'. */
+  hwMode?: 'prefer-hardware' | 'prefer-software';
   /** Initial mute state. Default true (browser autoplay policy). */
   muted?: boolean;
   /** Decode in the Web Worker; emit decodedframe/decodedaudio events instead of
@@ -77,6 +79,7 @@ export interface PlayerHandle extends EventTarget {
   readonly latencyMs: number;
   setRenderPacing(enabled: boolean): void;
   setDecodePacing(enabled: boolean): void;
+  setHwMode(mode: 'prefer-hardware' | 'prefer-software'): void;
   getRenderer(): CanvasRenderer | null;
   getVideo(): VideoPipeline | null;
   getAudio(): OpusAudioPipeline | AacAudioPipeline | null;
@@ -99,6 +102,7 @@ class Player extends EventTarget implements PlayerHandle {
 
   private renderPacingPref: boolean;
   private decodePacingPref: boolean;
+  private hwModePref: 'prefer-hardware' | 'prefer-software';
 
   private everConnected = false;
   private manualDisconnect = false;
@@ -113,6 +117,7 @@ class Player extends EventTarget implements PlayerHandle {
     this._muted = opts.muted ?? true;
     this.renderPacingPref = opts.renderPacing ?? true;
     this.decodePacingPref = opts.decodePacing ?? false;
+    this.hwModePref = opts.hwMode ?? 'prefer-hardware';
 
     this.viewer = createViewer({
       canvas: canvas ?? undefined,
@@ -214,10 +219,12 @@ class Player extends EventTarget implements PlayerHandle {
     this._videoHeight = h;
     this._readyState = 4;
     if (changed) this.emit('resize', { width: w, height: h } satisfies PlayerResizeDetail);
-    // Re-apply pacing preferences to the freshly built pipelines (pacing knobs
-    // attach to renderer / decoder instances, which are recreated on connect).
+    // Re-apply pacing / hw-mode preferences to the freshly built pipelines
+    // (these knobs attach to renderer / decoder instances, which are recreated
+    // on connect).
     this.viewer.getRenderer()?.setRenderPacing(this.renderPacingPref);
     this.viewer.getVideo()?.setDecodePacing(this.decodePacingPref);
+    this.viewer.getVideo()?.setHwMode(this.hwModePref);
     this.emit('canplay');
     this.emit('playing');
     if (this.resolveConnect) {
@@ -293,6 +300,12 @@ class Player extends EventTarget implements PlayerHandle {
     // No-op in decodeInWorker mode (decoder lives in worker).
     this.decodePacingPref = enabled;
     this.viewer.getVideo()?.setDecodePacing(enabled);
+  }
+
+  setHwMode(mode: 'prefer-hardware' | 'prefer-software'): void {
+    // No-op in decodeInWorker mode (decoder lives in worker).
+    this.hwModePref = mode;
+    this.viewer.getVideo()?.setHwMode(mode);
   }
 
   getRenderer(): CanvasRenderer | null { return this.viewer.getRenderer(); }
