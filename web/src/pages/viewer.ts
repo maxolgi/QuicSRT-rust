@@ -18,9 +18,6 @@ const debugRoot = document.getElementById('debug-root') as HTMLDivElement;
 const savedRenderPacing = localStorage.getItem('websrt-pacing-render') !== '0';
 const savedDecodePacing = localStorage.getItem('websrt-pacing-decode') === '1';
 
-// --- Decoder hw-acceleration persistence ---
-const savedHwMode = localStorage.getItem('websrt-hw-mode') === 'prefer-software' ? 'prefer-software' as const : undefined;
-
 // --- Latency persistence ---
 const savedLatency = localStorage.getItem('latency');
 if (savedLatency) latencyNum.value = savedLatency;
@@ -29,7 +26,6 @@ const handle = mountPlayer(canvas, {
   latencyMs: +latencyNum.value || 120,
   renderPacing: savedRenderPacing,
   decodePacing: savedDecodePacing,
-  hwMode: savedHwMode,
 });
 
 // --- Controls ---

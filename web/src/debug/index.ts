@@ -44,13 +44,13 @@ export function mountDebug(
       log(`Latency cycled to ${next}ms`, 'info');
     },
     setHwMode: (mode) => {
-      localStorage.setItem('websrt-hw-mode', mode);
-      handle.setHwMode(mode);
-      if (handle.getVideo()) {
-        log(`VideoDecoder hw preference → ${mode} (applies on next feed())`, 'info');
-      } else {
-        log(`hw preference → ${mode} (saved; applies on next connect)`, 'info');
+      const v = handle.getVideo();
+      if (!v) {
+        log('Cannot switch hw mode — no active VideoPipeline', 'err');
+        return;
       }
+      v.setHwMode(mode);
+      log(`VideoDecoder hw preference → ${mode} (applies on next feed())`, 'info');
     },
     setDecodePacing: (enabled) => {
       localStorage.setItem('websrt-pacing-decode', enabled ? '1' : '0');

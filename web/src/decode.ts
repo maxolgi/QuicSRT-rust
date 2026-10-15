@@ -581,6 +581,14 @@ function buildAv1CodecString(info: Av1SeqInfo): string {
 
 type VideoCodec = 'h264' | 'hevc' | 'av1';
 
+// Persisted hw-accel preference (written by VideoPipeline.setHwMode). Guarded —
+// this module also runs inside workers, which have no localStorage.
+function loadHwMode(): 'prefer-hardware' | 'prefer-software' {
+  return typeof localStorage !== 'undefined' && localStorage.getItem('websrt-hw-mode') === 'prefer-software'
+    ? 'prefer-software'
+    : 'prefer-hardware';
+}
+
 export class VideoPipeline {
   private decoder: VideoDecoder | null = null;
   private codec: VideoCodec | null = null;
@@ -622,7 +630,9 @@ export class VideoPipeline {
   private reconfigureCount = 0;
   // Hardware-acceleration preference. Exposed via setHwMode() so the debug
   // panel can A/B test hardware vs software decode paths without reconnecting.
-  private hwMode: 'prefer-hardware' | 'prefer-software' = 'prefer-hardware';
+  // Read from localStorage at construction so the choice survives reloads and
+  // reconnects (each connect builds a fresh pipeline).
+  private hwMode: 'prefer-hardware' | 'prefer-software' = loadHwMode();
   private lastCodecString: string | null = null;
   private lastHwAccel: string | undefined = undefined;
   private lastProfile = 0;
@@ -669,6 +679,7 @@ export class VideoPipeline {
   setHwMode(mode: 'prefer-hardware' | 'prefer-software') {
     if (this.hwMode === mode) return;
     this.hwMode = mode;
+    if (typeof localStorage !== 'undefined') localStorage.setItem('websrt-hw-mode', mode);
     this.configured = false;
     this.seenKeyframe = false;
     if (this.decoder) {
