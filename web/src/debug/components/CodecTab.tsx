@@ -91,11 +91,6 @@ export function CodecTab({ store }: Props): JSX.Element {
             Prefer Software {hwPref === 'prefer-software' ? '✓' : ''}
           </button>
         </div>
-        <div style={{ color: '#888', fontSize: '11px' }}>
-          Forces re-configure on next feed() using the cached SPS/PPS. A/B test
-          if VAAPI is producing choppy output — software decode rules out driver
-          issues. (Live toggle requires an active stream.)
-        </div>
       </div>
 
       <div class="debug-section">
