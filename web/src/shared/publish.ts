@@ -294,7 +294,7 @@ export function attachDebugResizer(opts: {
     onResize?.();
   }
 
-  const savedW = localStorage.getItem('websrt-debug-width');
+  const savedW = localStorage.getItem('quicsrt-debug-width');
   if (savedW) debugRoot.style.width = `${savedW}px`;
 
   let dragging = false;
@@ -322,7 +322,7 @@ export function attachDebugResizer(opts: {
     document.body.classList.remove('resizing');
     document.body.style.cursor = '';
     document.body.style.userSelect = '';
-    localStorage.setItem('websrt-debug-width', String(debugRoot.offsetWidth));
+    localStorage.setItem('quicsrt-debug-width', String(debugRoot.offsetWidth));
   });
 
   return { sync: syncResizerPosition };

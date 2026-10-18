@@ -34,7 +34,7 @@ export function CodecTab({ store }: Props): JSX.Element {
   const testActions = store.testActions.value
 
   const hwPref = video?.hwModePreference
-    ?? (localStorage.getItem('websrt-hw-mode') as 'prefer-hardware' | 'prefer-software' | null)
+    ?? (localStorage.getItem('quicsrt-hw-mode') as 'prefer-hardware' | 'prefer-software' | null)
     ?? 'prefer-hardware'
   const setHw = (mode: 'prefer-hardware' | 'prefer-software') => {
     testActions?.setHwMode(mode)

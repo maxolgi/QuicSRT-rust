@@ -101,7 +101,7 @@ function setPanelVisible(visible: boolean) {
   document.body.classList.toggle('debug-open', visible);
   if (visible) {
     debugResizer.sync();
-    localStorage.setItem('websrt-debug-open', '1');
+    localStorage.setItem('quicsrt-debug-open', '1');
     if (!panelMounted) {
       render(<DebugPanel store={store} />, debugRoot);
       panelMounted = true;
@@ -109,7 +109,7 @@ function setPanelVisible(visible: boolean) {
     }
   } else {
     document.body.style.paddingRight = '';
-    localStorage.removeItem('websrt-debug-open');
+    localStorage.removeItem('quicsrt-debug-open');
   }
 }
 
@@ -504,7 +504,7 @@ playbackToggleBtn.addEventListener('click', () => {
 // ─── Init ─────────────────────────────────────────────────────────
 
 // Persistent stream key: load from localStorage or generate a random 8-char one.
-const STREAM_KEY_KEY = 'websrt-stream-name';
+const STREAM_KEY_KEY = 'quicsrt-stream-name';
 const savedName = localStorage.getItem(STREAM_KEY_KEY);
 streamNameInput.value = savedName ?? Array.from(
   { length: 8 },

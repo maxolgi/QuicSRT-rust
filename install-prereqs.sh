@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# install-prereqs.sh — install WebSRT's toolchain prerequisites.
+# install-prereqs.sh — install QuicSRT's toolchain prerequisites.
 #
 # Installs: build tools (build-essential/cmake/pkg-config), Rust (via rustup,
 # user-local), the wasm32-unknown-unknown target, wasm-pack, Node.js >= 18,
@@ -10,7 +10,7 @@
 # After running this, run ./build.sh setup to build the WASM modules + npm install.
 #
 # Can be curl'd directly:
-#   curl -sSf https://raw.githubusercontent.com/maxolgi/WebSRT/master/install-prereqs.sh | bash
+#   curl -sSf https://raw.githubusercontent.com/maxolgi/QuicSRT/master/install-prereqs.sh | bash
 # (when piped, the script will not clone the repo for you — do that next)
 
 set -euo pipefail
@@ -43,7 +43,7 @@ NODESOURCE_MAJOR=20   # Node.js major version installed via NodeSource on Linux
 
 usage() {
     cat <<'EOF' >&2
-install-prereqs.sh — install WebSRT toolchain
+install-prereqs.sh — install QuicSRT toolchain
 
 Usage: ./install-prereqs.sh [--check] [--no-color] [-y]
 

@@ -7,7 +7,7 @@ build tools — Debian/Ubuntu, Fedora, Arch, macOS):
 
     ./install-prereqs.sh           # idempotent; --check to verify only
     # or remotely, before cloning:
-    curl -sSf https://raw.githubusercontent.com/maxolgi/WebSRT/master/install-prereqs.sh | bash
+    curl -sSf https://raw.githubusercontent.com/maxolgi/QuicSRT/master/install-prereqs.sh | bash
 
 `./build.sh` wraps every common build step (`./build.sh --help` for the full menu):
 
@@ -19,9 +19,9 @@ build tools — Debian/Ubuntu, Fedora, Arch, macOS):
 ./build.sh wasm srt --debug  # dev profile instead of release
 
 # Native builds
-./build.sh gateway                # cargo build --release -p websrt-gateway
+./build.sh gateway                # cargo build --release -p quicsrt-gateway
 ./build.sh gateway --sim-loss     # add the sim-loss feature
-./build.sh lib                    # cargo build --release -p websrt (the library)
+./build.sh lib                    # cargo build --release -p quicsrt (the library)
 
 # Web
 ./build.sh web                    # vite dev server (alias for: ./build.sh web dev)
@@ -34,17 +34,17 @@ cargo fmt --check                 # verify Rust formatting (run `cargo fmt --all
 
 # Combined workflows (AGENTS.md "Critical build order")
 ./build.sh srt-protocol           # rule 1: gateway + srt-wasm after editing forked srt-rs
-./build.sh restart                # rule 5: sudo supervisorctl restart websrt
+./build.sh restart                # rule 5: sudo supervisorctl restart quicsrt
 ./build.sh all                    # clean -y → setup → gateway → web build
 ./build.sh clean                  # rm -rf web/wasm web/dist target
 
 Raw form (what the script wraps — useful when debugging the script itself):
 
 # Demo gateway binary (release, with sim-loss feature)
-cargo build --release -p websrt-gateway --features sim-loss
+cargo build --release -p quicsrt-gateway --features sim-loss
 
 # Library only (release)
-cargo build --release -p websrt
+cargo build --release -p quicsrt
 
 # WASM crates — must rebuild + copy to web/ after changes
 (cd crates/srt-wasm && wasm-pack build --target web --release)
@@ -69,13 +69,13 @@ cd web && npx tsc --noEmit
 2. Changing only `web/src/*.ts` / `*.tsx` → Vite hot-reloads, no rebuild needed
 3. Changing `crates/srt-wasm/src/lib.rs` → `./build.sh wasm srt` + browser reload
 4. Changing `crates/mpeg2ts-wasm/` or `crates/ts-muxer-wasm/` → `./build.sh wasm <crate>` + browser reload. Changing native `crates/ts-muxer/` → `./build.sh wasm ts-muxer` (rebuilds the shim) + browser reload
-5. Changing `crates/websrt/` (library) → `./build.sh gateway` + `./build.sh restart` (production only)
-6. Changing `crates/websrt-gateway/src/gui.rs` or `log_buffer.rs` → `./build.sh gateway` (no WASM or web rebuild needed)
+5. Changing `crates/quicsrt/` (library) → `./build.sh gateway` + `./build.sh restart` (production only)
+6. Changing `crates/quicsrt-gateway/src/gui.rs` or `log_buffer.rs` → `./build.sh gateway` (no WASM or web rebuild needed)
 
 ## Workspace structure
 
-- `crates/websrt/` — **library crate**: SRT-over-WebTransport gateway core. Exposes `Gateway` builder, `BrowserSession`, `Broadcaster`, `SrtInitiator`, `Cert`, `Ingester`. Sim-loss behind `sim-loss` feature.
-- `crates/websrt-gateway/` — **reference implementation**: CLI binary built on the library. Runs in production under supervisord.
+- `crates/quicsrt/` — **library crate**: SRT-over-WebTransport gateway core. Exposes `Gateway` builder, `BrowserSession`, `Broadcaster`, `SrtInitiator`, `Cert`, `Ingester`. Sim-loss behind `sim-loss` feature.
+- `crates/quicsrt-gateway/` — **reference implementation**: CLI binary built on the library. Runs in production under supervisord.
 - `crates/srt-wasm/` — browser-side SRT receiver + sender (WASM). Used by both viewer and publisher pages.
 - `crates/mpeg2ts-wasm/` — browser-side TS demuxer (WASM). Viewer side.
 - `crates/ts-muxer/` — native MPEG-TS muxer (H.264/HEVC/AV1 video, Opus audio, raw PCM). Owns all muxing logic; compiled to wasm32 inside `ts-muxer-wasm` and usable natively (dev example: `cargo run -p ts-muxer-wasm --example dump_ts`).
@@ -83,9 +83,9 @@ cd web && npx tsc --noEmit
 
 ## Architecture layers
 
-- **`crates/websrt/` (library)** — the embeddable product. `Gateway` builder,
+- **`crates/quicsrt/` (library)** — the embeddable product. `Gateway` builder,
   sessions, SRT state machine, broadcast fanout, security hooks.
-- **`crates/websrt-gateway/` (reference implementation)** — the canonical binary.
+- **`crates/quicsrt-gateway/` (reference implementation)** — the canonical binary.
   CLI parse, cert setup, ingester wiring, health endpoint. Runs under supervisord.
   Launches an eframe (egui) GUI by default; `--no-gui` for headless CLI mode.
 - **`web/` (demo UI)** — player page, stream page, and `call.tsx` 1:1 video call
@@ -105,7 +105,7 @@ commits pushed to a fork are NOT pulled automatically**. You must run `cargo upd
 - `~/srt-rs` — branch `main` (pushes to `maxolgi/srt-rs`)
 - `~/mpeg2ts` — branch `master` (pushes to `maxolgi/mpeg2ts`)
 
-**Where fixes go:** `mpeg2ts` is parse-side only (the muxer is WebSRT-native in
+**Where fixes go:** `mpeg2ts` is parse-side only (the muxer is QuicSRT-native in
 `ts-muxer-wasm`). Any bug in TS/PES/PSI parsing semantics is fixed **in the fork**
 so every consumer benefits; wrappers must not re-implement fork logic — if a
 wrapper needs internal arithmetic, the fork exposes it publicly instead. Same
@@ -152,13 +152,13 @@ existing local clones (`~/srt-rs`, `~/mpeg2ts` — see above):
 
 1. Work in the clone, on the correct branch (`main` for srt-rs, `master` for mpeg2ts)
 2. Commit your changes, then ask the human to push to GitHub
-3. After the human pushes, run `cargo update -p <crate>` in WebSRT to pull the new commit
+3. After the human pushes, run `cargo update -p <crate>` in QuicSRT to pull the new commit
 
 ### Inherited QUIC features (via WebTransport)
 
 - **Connection migration (§4.7):** WebTransport inherits QUIC's connection migration. A browser that switches networks (cellular → WiFi) keeps the WebTransport session alive; the SRT layer pauses briefly while packets queue, then resumes. No code change required.
 - **Pacing / TSBPD interaction (§4.6):** WebTransport's built-in pacing may delay packets past SRT's TSBPD latency under congestion. The browser's SRT receiver drops those packets as "too late" — correct behavior for live streaming, not a bug.
-- **1-RTT handshake (§4.3):** WebSRT skips the SRT Induction phase entirely. WebTransport's TLS layer provides the DoS protection that the SRT cookie mechanism was designed for, so the gateway sends a Conclusion handshake directly. Both `SrtInitiator` (gateway) and `Listen` (browser WASM) use the skip-induction code paths. Saves one RTT (~50-200 ms) on every viewer join.
+- **1-RTT handshake (§4.3):** QuicSRT skips the SRT Induction phase entirely. WebTransport's TLS layer provides the DoS protection that the SRT cookie mechanism was designed for, so the gateway sends a Conclusion handshake directly. Both `SrtInitiator` (gateway) and `Listen` (browser WASM) use the skip-induction code paths. Saves one RTT (~50-200 ms) on every viewer join.
 - **RTT seeding (§4.5):** The gateway reads QUIC's smoothed RTT via `wtransport::Connection::rtt()` and seeds SRT's EWMA via `ConnInitSettings.initial_rtt`. The browser reads `WebTransport.getStats().smoothedRtt`. Both seed SRT's `SendBuffer.rtt` and `ARQ.rtt` for accurate cold-start retransmit timing and congestion window estimation.
 - **CC-aware retransmit (§4.5):** The SRT sender skips NAK-triggered retransmits whose predicted arrival time (`now + RTT`) exceeds the packet's TSBPD deadline. Prevents wasting bandwidth on retransmits the receiver will drop as too-late. Combined with RTT seeding, implements the "transport-aware retransmission decisions" the draft recommends.
 
@@ -170,14 +170,14 @@ Browser runs the **same** `srt-protocol` + `mpeg2ts` Rust crates compiled to WAS
 
 ## Key files
 
-- `crates/websrt/src/gateway.rs` — high-level `Gateway` builder: WT accept loop, session spawn, viewer cap, graceful drain.
-- `crates/websrt/src/session.rs` — per-browser session: `recv_pump` task drains WT datagrams into the SRT initiator; sender drive comes from the centralized ticker in `registry.rs`. The two halves share `SrtInitiator`, `LossInjector`, the WT `Connection`, and the shutdown signal via `Arc<SessionEntry>`. LossInjector (sim-loss feature) lives here.
-- `crates/websrt/src/registry.rs` — central session registry + single ticker task driving all sessions' SRT state machines (~2ms cadence, eliminating N per-session timers); per-session `recv_pump` tasks remain. Lock strategy (parking_lot vs tokio mutex, initiator→loss lock ordering) documented in the module doc.
-- `crates/websrt/src/nocc.rs` — no-op QUIC congestion controller: unlimited window so quinn never throttles or paces datagram sends — SRT owns all congestion control and reliability.
-- `crates/websrt/src/srt_sender.rs` — wraps `srt_protocol::Connect` → `DuplexConnection`. `drain()` captures `Action::UpdateStatistics` into `last_stats`.
-- `crates/websrt-gateway/src/main.rs` — reference binary: CLI parse, `--no-gui` branching, `run_gateway()` (cert, cert-hash.js, ingester, axum health server, gateway run task).
-- `crates/websrt-gateway/src/gui.rs` — eframe (egui) GUI app: config form mirroring all CLI options, Start/Stop buttons, live stats from `GatewayStatsHandle`, scrolling log panel. Falls back to CLI if no display. Secrets (`srt_passphrase`, `auth_token`) are deliberately `#[serde(skip)]` — never persisted to the config file.
-- `crates/websrt-gateway/src/log_buffer.rs` — `LogBuffer` ring buffer + `MakeWriter` impl for capturing tracing output into the GUI log panel (second `fmt` layer alongside stdout).
+- `crates/quicsrt/src/gateway.rs` — high-level `Gateway` builder: WT accept loop, session spawn, viewer cap, graceful drain.
+- `crates/quicsrt/src/session.rs` — per-browser session: `recv_pump` task drains WT datagrams into the SRT initiator; sender drive comes from the centralized ticker in `registry.rs`. The two halves share `SrtInitiator`, `LossInjector`, the WT `Connection`, and the shutdown signal via `Arc<SessionEntry>`. LossInjector (sim-loss feature) lives here.
+- `crates/quicsrt/src/registry.rs` — central session registry + single ticker task driving all sessions' SRT state machines (~2ms cadence, eliminating N per-session timers); per-session `recv_pump` tasks remain. Lock strategy (parking_lot vs tokio mutex, initiator→loss lock ordering) documented in the module doc.
+- `crates/quicsrt/src/nocc.rs` — no-op QUIC congestion controller: unlimited window so quinn never throttles or paces datagram sends — SRT owns all congestion control and reliability.
+- `crates/quicsrt/src/srt_sender.rs` — wraps `srt_protocol::Connect` → `DuplexConnection`. `drain()` captures `Action::UpdateStatistics` into `last_stats`.
+- `crates/quicsrt-gateway/src/main.rs` — reference binary: CLI parse, `--no-gui` branching, `run_gateway()` (cert, cert-hash.js, ingester, axum health server, gateway run task).
+- `crates/quicsrt-gateway/src/gui.rs` — eframe (egui) GUI app: config form mirroring all CLI options, Start/Stop buttons, live stats from `GatewayStatsHandle`, scrolling log panel. Falls back to CLI if no display. Secrets (`srt_passphrase`, `auth_token`) are deliberately `#[serde(skip)]` — never persisted to the config file.
+- `crates/quicsrt-gateway/src/log_buffer.rs` — `LogBuffer` ring buffer + `MakeWriter` impl for capturing tracing output into the GUI log panel (second `fmt` layer alongside stdout).
 - `crates/srt-wasm/src/lib.rs` — `SrtReceiver` wraps `Listen` → `DuplexConnection`. State in `RefCell`. `handle_datagram(bytes, now_us)` + `poll(now_us)` return `Vec<SrtAction>`.
 - `web/src/decode.ts` — H.264 SPS parser (exp-Golomb, High profile), avcC builder, `VideoPipeline`, `OpusAudioPipeline`, `AacAudioPipeline`. AudioWorklet fallback when `MediaStreamTrackGenerator` unavailable.
 - `web/src/worker.ts` — Web Worker: runs SrtReceiver + Demuxer off main thread. Datagrams batched (up to 16) before processing. Polls SRT state machine every 10ms.
@@ -192,9 +192,9 @@ Browser runs the **same** `srt-protocol` + `mpeg2ts` Rust crates compiled to WAS
 ## Runtime
 
 Gateway runs under supervisord (must use `--no-gui` in the supervisord config):
-- Config: `websrt.conf` → deployed to `/etc/supervisor/conf.d/websrt.conf`
-- Logs: `/var/log/websrt/gateway.out.log` + `/var/log/websrt/gateway.err.log`
-- Restart: `sudo supervisorctl reread && sudo supervisorctl update && sudo supervisorctl restart websrt`
+- Config: `quicsrt.conf` → deployed to `/etc/supervisor/conf.d/quicsrt.conf`
+- Logs: `/var/log/quicsrt/gateway.out.log` + `/var/log/quicsrt/gateway.err.log`
+- Restart: `sudo supervisorctl reread && sudo supervisorctl update && sudo supervisorctl restart quicsrt`
 - **After rebuilding the binary**, must restart supervisord to pick it up
 - On boot, gateway writes `web/public/cert-hash.js` (hash for self-signed, null for mkcert)
 
@@ -222,9 +222,9 @@ Gateway runs under supervisord (must use `--no-gui` in the supervisord config):
 
 - `web/smoke.mjs` — Node smoke test for both WASM modules (no browser needed)
 - `web/pcm-port-bench.mjs` — relay (worker→main→consumer) vs direct MessagePort PCM jitter comparison (Node worker_threads)
-- `cargo run -p websrt-gateway --bin wt_hs_probe` — SRT handshake + TS continuity-counter probe (tests NAK/retransmit under sim-loss)
-- `cargo run -p websrt-gateway --bin mock_obs` — Sends fixture over SRT to test ingester without real OBS
-- `cargo run -p websrt-gateway --bin wt_echo_client` — WT datagram round-trip test
+- `cargo run -p quicsrt-gateway --bin wt_hs_probe` — SRT handshake + TS continuity-counter probe (tests NAK/retransmit under sim-loss)
+- `cargo run -p quicsrt-gateway --bin mock_obs` — Sends fixture over SRT to test ingester without real OBS
+- `cargo run -p quicsrt-gateway --bin wt_echo_client` — WT datagram round-trip test
 
 ## Git workflow for agents
 

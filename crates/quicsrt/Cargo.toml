@@ -1,5 +1,5 @@
 [package]
-name = "websrt"
+name = "quicsrt"
 version.workspace = true
 edition.workspace = true
 description = "SRT-over-WebTransport gateway library"
@@ -33,7 +33,7 @@ rustls-pki-types = "1"
 [dev-dependencies]
 proptest = "1"
 # Required so integration tests can exercise the forked srt-protocol internals
-# directly (it is only a transitive dependency of websrt).
+# directly (it is only a transitive dependency of quicsrt).
 srt-protocol.workspace = true
 # Only needed by the e2e integration test to drive a real WT client and observe
 # gateway log output with --nocapture.

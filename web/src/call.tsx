@@ -74,7 +74,7 @@ function setPanelVisible(visible: boolean) {
   document.body.classList.toggle('debug-open', visible);
   if (visible) {
     debugResizer.sync();
-    localStorage.setItem('websrt-debug-open', '1');
+    localStorage.setItem('quicsrt-debug-open', '1');
     if (!panelMounted) {
       render(<DebugPanel store={store} />, debugRoot);
       panelMounted = true;
@@ -83,7 +83,7 @@ function setPanelVisible(visible: boolean) {
   } else {
     document.body.style.paddingRight = '';
     callEl.style.right = '';
-    localStorage.removeItem('websrt-debug-open');
+    localStorage.removeItem('quicsrt-debug-open');
   }
 }
 
@@ -597,7 +597,7 @@ document.addEventListener('visibilitychange', () => {
 // ─── Init ─────────────────────────────────────────────────────────
 
 // Persistent room key: load from localStorage or generate a random 8-char one.
-const ROOM_KEY_KEY = 'websrt-call-room';
+const ROOM_KEY_KEY = 'quicsrt-call-room';
 const savedRoom = localStorage.getItem(ROOM_KEY_KEY);
 roomNameInput.value = savedRoom ?? Array.from(
   { length: 8 },

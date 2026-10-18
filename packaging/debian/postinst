@@ -2,7 +2,7 @@
 # postinst — create runtime dirs after .deb install.
 set -e
 
-mkdir -p /var/lib/websrt /var/log/websrt
+mkdir -p /var/lib/quicsrt /var/log/quicsrt
 
 # Reload supervisord so it picks up the shipped config, if supervisord is running.
 if command -v supervisorctl >/dev/null 2>&1; then

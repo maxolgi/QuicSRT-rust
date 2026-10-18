@@ -43,7 +43,7 @@ export type PublishMsg =
   | { type: 'stats'; stats: StatsMsg; encode?: EncodeStats }
   | { type: 'batch'; msgs: PublishMsg[] };
 
-const VERBOSE = typeof localStorage !== 'undefined' && localStorage.getItem('websrt-debug') === '1';
+const VERBOSE = typeof localStorage !== 'undefined' && localStorage.getItem('quicsrt-debug') === '1';
 
 let rx: SrtReceiver | null = null;
 let muxer: TsMuxer | null = null;

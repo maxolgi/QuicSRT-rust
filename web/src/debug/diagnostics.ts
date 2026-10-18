@@ -44,7 +44,7 @@ export async function downloadDiagnostics(store: DebugStore): Promise<void> {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `websrt-debug-${formatStamp()}.json`;
+    a.download = `quicsrt-debug-${formatStamp()}.json`;
     document.body.appendChild(a);
     a.click();
     a.remove();

@@ -13,10 +13,10 @@ export function TestTab({ store }: Props): JSX.Element {
   useSignals(store.testActions, store.latencyMs, store.snapA, store.snapB)
 
   const [decodePacing, setDecodePacingState] = useState(
-    () => localStorage.getItem('websrt-pacing-decode') === '1',
+    () => localStorage.getItem('quicsrt-pacing-decode') === '1',
   )
   const [renderPacing, setRenderPacingState] = useState(
-    () => localStorage.getItem('websrt-pacing-render') !== '0',
+    () => localStorage.getItem('quicsrt-pacing-render') !== '0',
   )
   const [showAll, setShowAll] = useState(false)
 

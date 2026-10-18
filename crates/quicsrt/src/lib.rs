@@ -7,9 +7,9 @@
 //! ## Quick start
 //!
 //! ```no_run
-//! use websrt::Gateway;
-//! use websrt::cert::{Cert, CertSource};
-//! use websrt::ingest::srt::SrtIngester;
+//! use quicsrt::Gateway;
+//! use quicsrt::cert::{Cert, CertSource};
+//! use quicsrt::ingest::srt::SrtIngester;
 //!
 //! # async fn run() -> anyhow::Result<()> {
 //! let cert = Cert::build(CertSource::SelfSigned { sans: vec!["localhost".into()] }).await?;

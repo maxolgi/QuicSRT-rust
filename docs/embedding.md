@@ -1,6 +1,6 @@
-# Embedding the WebSRT player
+# Embedding the QuicSRT player
 
-The WebSRT player is a **canvas + WebCodecs SDK** you bundle into your own
+The QuicSRT player is a **canvas + WebCodecs SDK** you bundle into your own
 application. There is no `<video>`/MSE path — frames go straight from the SRT
 receiver (WASM) through a `VideoDecoder` onto a `<canvas>` you own. Your app
 owns all the UI (buttons, sliders, overlays); the SDK renders video and emits
@@ -35,8 +35,8 @@ Your bundler (Vite or webpack 5) resolves the worker and the WASM.
 
 ```sh
 # in your app repo
-git submodule add https://github.com/maxolgi/WebSRT.git vendor/websrt
-cd vendor/websrt
+git submodule add https://github.com/maxolgi/QuicSRT.git vendor/quicsrt
+cd vendor/quicsrt
 ./build.sh wasm        # builds srt-wasm + mpeg2ts-wasm + ts-muxer-wasm
                        # → copies pkg/ into web/wasm/ (gitignored; required)
 ```
@@ -48,7 +48,7 @@ cd vendor/websrt
 Then import and mount:
 
 ```ts
-import { mountPlayer } from 'websrt-web/src/player';
+import { mountPlayer } from 'quicsrt-web/src/player';
 
 const handle = mountPlayer(document.querySelector('canvas')!, {
   host: 'gateway-a.example',
@@ -90,7 +90,7 @@ problems:
    CORS.
 2. **Cross-origin module/worker/WASM loads during development.** Module
    scripts, workers, and `.wasm` are CORS-gated fetches. If you point a page on
-   `B` at the player bundle served from the WebSRT **Vite dev server** on `A`,
+   `B` at the player bundle served from the QuicSRT **Vite dev server** on `A`,
    the browser will block those fetches without correct CORS headers on the dev
    server. This only ever bites you during *development* against the unbundled
    dev server.
@@ -232,7 +232,7 @@ For embedding, run the gateway with `--cert-mode mkcert` (LAN) or a real
 Let's Encrypt cert (public hostname) and pass `certHash: null`.
 
 ```sh
-websrt-gateway --cert-mode mkcert --wt-port 4433 ...
+quicsrt-gateway --cert-mode mkcert --wt-port 4433 ...
 ```
 
 ### Why self-signed hashes rotate (and why you can't avoid it)
@@ -271,7 +271,7 @@ trust store, so the two-week cap does **not** apply:
 ```sh
 mkcert -install                          # once per browser; installs the local CA
 mkcert 192.168.1.10                      # cert valid 2y3m, includes the IP as a SAN
-websrt-gateway --cert-mode mkcert \
+quicsrt-gateway --cert-mode mkcert \
   --cert-pem ./192.168.1.10.pem \
   --key-pem  ./192.168.1.10-key.pem \
   --wt-port 4433 ...
@@ -313,7 +313,7 @@ host (SlopShady `slopshady/src/server.rs`, CakeMix `cakemix-server/src/main.rs`)
 The hash and the WebTransport port are both exposed server-side today:
 
 - **The gateway boot log** prints `WebTransport cert DER SHA-256: <hex>`
-  (`crates/websrt-gateway/src/main.rs`).
+  (`crates/quicsrt-gateway/src/main.rs`).
 - **The `cert-hash.js` file** the gateway writes at boot
   (`web/public/cert-hash.js`), readable on a shared filesystem or fetchable
   from the encoder's existing web server with TLS verification disabled

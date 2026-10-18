@@ -15,8 +15,8 @@ const debugToggle = document.getElementById('debug-toggle') as HTMLButtonElement
 const debugRoot = document.getElementById('debug-root') as HTMLDivElement;
 
 // --- Pacing persistence (render ON / decode OFF by default, as in advanced.tsx) ---
-const savedRenderPacing = localStorage.getItem('websrt-pacing-render') !== '0';
-const savedDecodePacing = localStorage.getItem('websrt-pacing-decode') === '1';
+const savedRenderPacing = localStorage.getItem('quicsrt-pacing-render') !== '0';
+const savedDecodePacing = localStorage.getItem('quicsrt-pacing-decode') === '1';
 
 // --- Latency persistence ---
 const savedLatency = localStorage.getItem('latency');
@@ -101,7 +101,7 @@ function syncResizerPosition() {
 }
 
 {
-  const savedW = localStorage.getItem('websrt-debug-width');
+  const savedW = localStorage.getItem('quicsrt-debug-width');
   if (savedW) debugRoot.style.width = `${savedW}px`;
 
   let dragging = false;
@@ -128,7 +128,7 @@ function syncResizerPosition() {
     document.body.classList.remove('resizing');
     document.body.style.cursor = '';
     document.body.style.userSelect = '';
-    localStorage.setItem('websrt-debug-width', String(debugRoot.offsetWidth));
+    localStorage.setItem('quicsrt-debug-width', String(debugRoot.offsetWidth));
   });
 }
 
@@ -141,7 +141,7 @@ async function setPanelVisible(visible: boolean): Promise<void> {
     debugRoot.classList.add('visible');
     document.body.classList.add('debug-open');
     resizer.classList.add('visible');
-    localStorage.setItem('websrt-debug-open', '1');
+    localStorage.setItem('quicsrt-debug-open', '1');
     syncResizerPosition();
     if (debugHandle || debugMounting) return;
     debugMounting = true;
@@ -158,7 +158,7 @@ async function setPanelVisible(visible: boolean): Promise<void> {
   document.body.classList.remove('debug-open');
   resizer.classList.remove('visible');
   document.body.style.paddingRight = '';
-  localStorage.removeItem('websrt-debug-open');
+  localStorage.removeItem('quicsrt-debug-open');
   debugHandle?.destroy();
   debugHandle = null;
 }
@@ -167,7 +167,7 @@ debugToggle.addEventListener('click', () => {
   void setPanelVisible(!debugRoot.classList.contains('visible'));
 });
 
-if (localStorage.getItem('websrt-debug-open') === '1') {
+if (localStorage.getItem('quicsrt-debug-open') === '1') {
   void setPanelVisible(true);
 }
 

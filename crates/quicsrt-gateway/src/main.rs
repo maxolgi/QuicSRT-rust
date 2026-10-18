@@ -3,7 +3,7 @@
 //! By default launches a GUI (eframe/egui) with a config form and Start/Stop
 //! buttons. Use `--no-gui` for the original headless CLI behavior.
 //!
-//! This is the application built on the `websrt` library.
+//! This is the application built on the `quicsrt` library.
 //! For embedding, use the library crate directly.
 
 // Use the Windows GUI subsystem for release builds so no background console
@@ -24,6 +24,11 @@ use axum::extract::State;
 use axum::routing::get;
 use axum::{Json, Router};
 use clap::{Parser, ValueEnum};
+use quicsrt::cert::{Cert, CertSource};
+use quicsrt::ingest::file::FileIngester;
+use quicsrt::ingest::srt::SrtIngester;
+use quicsrt::ingest::{SrtListenerService, TsContinuityChecker, TsStatsHandle};
+use quicsrt::{Gateway, GatewayStatsHandle};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -32,11 +37,6 @@ use tokio::task::JoinHandle;
 use tracing_subscriber::layer::SubscriberExt as _;
 use tracing_subscriber::util::SubscriberInitExt as _;
 use tracing_subscriber::EnvFilter;
-use websrt::cert::{Cert, CertSource};
-use websrt::ingest::file::FileIngester;
-use websrt::ingest::srt::SrtIngester;
-use websrt::ingest::{SrtListenerService, TsContinuityChecker, TsStatsHandle};
-use websrt::{Gateway, GatewayStatsHandle};
 
 use log_buffer::{BufferMaker, LogBuffer};
 use serde_json::json;
@@ -66,7 +66,11 @@ pub enum SrtMode {
 }
 
 #[derive(Parser, Debug, Clone)]
-#[command(name = "websrt-gateway", version, about = "SRT → WebTransport gateway")]
+#[command(
+    name = "quicsrt-gateway",
+    version,
+    about = "SRT → WebTransport gateway"
+)]
 pub struct Cli {
     /// Skip the GUI and run in headless CLI mode (original behavior).
     #[arg(long)]
@@ -302,7 +306,7 @@ fn run_gui(cli: Cli, log_buffer: Arc<LogBuffer>) -> Result<()> {
     };
 
     let result = eframe::run_native(
-        "WebSRT Gateway",
+        "QuicSRT Gateway",
         options,
         Box::new(move |cc| Ok(Box::new(gui::GuiApp::new(cli, runtime, log_buffer, cc)))),
     );

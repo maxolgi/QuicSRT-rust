@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# build.sh — orchestrator for WebSRT WASM, gateway, library, and web builds.
+# build.sh — orchestrator for QuicSRT WASM, gateway, library, and web builds.
 #
 # Wraps the snippets in AGENTS.md "Build commands" so the wasm→web/wasm copy
 # cycle, the forked srt-protocol two-half rebuild, and the supervisord restart
@@ -36,7 +36,7 @@ err()  { printf '%s✗%s %s\n'  "$C_ERR"  "$C_RST" "$*" >&2; }
 
 usage() {
     cat <<'EOF' >&2
-build.sh — WebSRT build orchestrator
+build.sh — QuicSRT build orchestrator
 
 Usage: ./build.sh [GLOBAL FLAGS] COMMAND [COMMAND FLAGS] [ARGS]
 
@@ -60,7 +60,7 @@ Commands:
           cargo build the gateway binary (release by default).
 
   lib [--debug]
-          cargo build the websrt library crate (release by default).
+          cargo build the quicsrt library crate (release by default).
 
   web [mode]
           Run the Vite dev/build/preview script.
@@ -80,7 +80,7 @@ Commands:
           maxolgi/srt-rs crate.
 
   restart
-          sudo supervisorctl restart websrt. Prints the config and log
+          sudo supervisorctl restart quicsrt. Prints the config and log
           paths first so you can Ctrl-C on a machine without supervisord.
 
   update-forks
@@ -206,8 +206,8 @@ EOF
     if [[ ${#features[@]} -gt 0 ]]; then
         feature_args=(--features "${features[*]}")
     fi
-    info "cargo build ${profile_args[*]} -p websrt-gateway ${features[*]:-}"
-    cargo build "${profile_args[@]}" -p websrt-gateway "${feature_args[@]+"${feature_args[@]}"}"
+    info "cargo build ${profile_args[*]} -p quicsrt-gateway ${features[*]:-}"
+    cargo build "${profile_args[@]}" -p quicsrt-gateway "${feature_args[@]+"${feature_args[@]}"}"
     ok "gateway built"
 }
 
@@ -218,15 +218,15 @@ cmd_lib() {
             --debug) profile_args=(--profile dev); shift ;;
             -h|--help)
                 cat <<'EOF' >&2
-lib — build the websrt library crate
+lib — build the quicsrt library crate
 Usage: ./build.sh lib [--debug]
 EOF
                 return 0 ;;
             *) err "lib: unknown arg: $1"; return 2 ;;
         esac
     done
-    info "cargo build ${profile_args[*]} -p websrt"
-    cargo build "${profile_args[@]}" -p websrt
+    info "cargo build ${profile_args[*]} -p quicsrt"
+    cargo build "${profile_args[@]}" -p quicsrt
     ok "lib built"
 }
 
@@ -340,22 +340,22 @@ cmd_restart() {
         case "$1" in
             -h|--help)
                 cat <<'EOF' >&2
-restart — sudo supervisorctl restart websrt
+restart — sudo supervisorctl restart quicsrt
 Usage: ./build.sh restart
 EOF
                 return 0 ;;
             *) err "restart: unknown arg: $1"; return 2 ;;
         esac
     done
-    if [[ ! -f websrt.conf ]]; then
-        err "websrt.conf not found at repo root — is this the production host?"
+    if [[ ! -f quicsrt.conf ]]; then
+        err "quicsrt.conf not found at repo root — is this the production host?"
         return 2
     fi
-    info "config: $(pwd)/websrt.conf"
+    info "config: $(pwd)/quicsrt.conf"
     info "logs:   logs/gateway.out.log, logs/gateway.err.log"
-    info "running: sudo supervisorctl restart websrt"
-    sudo supervisorctl restart websrt
-    ok "websrt restarted"
+    info "running: sudo supervisorctl restart quicsrt"
+    sudo supervisorctl restart quicsrt
+    ok "quicsrt restarted"
 }
 
 cmd_update_forks() {

@@ -53,12 +53,12 @@ export function mountDebug(
       log(`VideoDecoder hw preference → ${mode} (applies on next feed())`, 'info');
     },
     setDecodePacing: (enabled) => {
-      localStorage.setItem('websrt-pacing-decode', enabled ? '1' : '0');
+      localStorage.setItem('quicsrt-pacing-decode', enabled ? '1' : '0');
       handle.setDecodePacing(enabled);
       log(`decode pacing → ${enabled ? 'ON' : 'OFF'}`, 'info');
     },
     setRenderPacing: (enabled) => {
-      localStorage.setItem('websrt-pacing-render', enabled ? '1' : '0');
+      localStorage.setItem('quicsrt-pacing-render', enabled ? '1' : '0');
       handle.setRenderPacing(enabled);
       log(`render pacing → ${enabled ? 'ON' : 'OFF'}`, 'info');
     },
@@ -116,7 +116,7 @@ export function mountDebug(
       acc += cc;
     }
   };
-  window.addEventListener('websrt:audio-select-channel', onAudioChannel);
+  window.addEventListener('quicsrt:audio-select-channel', onAudioChannel);
 
   let destroyed = false;
   return {
@@ -130,7 +130,7 @@ export function mountDebug(
       handle.removeEventListener('drift', onDrift);
       handle.removeEventListener('error', onError);
       handle.removeEventListener('stats', onceWorkerReady);
-      window.removeEventListener('websrt:audio-select-channel', onAudioChannel);
+      window.removeEventListener('quicsrt:audio-select-channel', onAudioChannel);
       handle.getWorker()?.postMessage({ cmd: 'debug-rate', ms: 1000 });
       render(null, container);
     },

@@ -3451,6 +3451,60 @@ dependencies = [
 ]
 
 [[package]]
+name = "quicsrt"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "bytes",
+ "futures",
+ "mpeg2ts",
+ "parking_lot",
+ "percent-encoding",
+ "proptest",
+ "rand 0.8.7",
+ "rustls-pki-types",
+ "srt-protocol",
+ "srt-tokio",
+ "subtle",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "wtransport",
+]
+
+[[package]]
+name = "quicsrt-gateway"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "axum",
+ "axum-server",
+ "bytes",
+ "clap",
+ "eframe",
+ "futures",
+ "hex",
+ "image",
+ "local-ip-address",
+ "mime_guess",
+ "quicsrt",
+ "rust-embed",
+ "rustls",
+ "serde",
+ "serde_json",
+ "srt-protocol",
+ "srt-tokio",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "windows-sys 0.59.0",
+ "winresource",
+ "wtransport",
+]
+
+[[package]]
 name = "quinn"
 version = "0.11.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5162,60 +5216,6 @@ dependencies = [
  "objc2-foundation 0.3.2",
  "url",
  "web-sys",
-]
-
-[[package]]
-name = "websrt"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "bytes",
- "futures",
- "mpeg2ts",
- "parking_lot",
- "percent-encoding",
- "proptest",
- "rand 0.8.7",
- "rustls-pki-types",
- "srt-protocol",
- "srt-tokio",
- "subtle",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "wtransport",
-]
-
-[[package]]
-name = "websrt-gateway"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "axum",
- "axum-server",
- "bytes",
- "clap",
- "eframe",
- "futures",
- "hex",
- "image",
- "local-ip-address",
- "mime_guess",
- "rust-embed",
- "rustls",
- "serde",
- "serde_json",
- "srt-protocol",
- "srt-tokio",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "websrt",
- "windows-sys 0.59.0",
- "winresource",
- "wtransport",
 ]
 
 [[package]]

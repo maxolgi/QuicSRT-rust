@@ -1,8 +1,8 @@
 //! Regression guards for the critical forked `srt-protocol` patches.
 //!
 //! These tests exist so that a future rebase onto upstream `srt-protocol`
-//! that silently drops one of the WebSRT patches is caught by `cargo test
-//! -p websrt`. They exercise the patched code paths directly through the
+//! that silently drops one of the QuicSRT patches is caught by `cargo test
+//! -p quicsrt`. They exercise the patched code paths directly through the
 //! `srt_protocol` crate.
 //!
 //! Coverage map:
@@ -45,8 +45,8 @@ use std::net::SocketAddr;
 // doubles the TSBPD clock error on every sync. The fork applies `+drift`.
 // ---------------------------------------------------------------------------
 
-/// Mirror of `crates/websrt-gateway/tests/timebase_drift.rs`, kept in the
-/// library crate so it runs under `cargo test -p websrt`.
+/// Mirror of `crates/quicsrt-gateway/tests/timebase_drift.rs`, kept in the
+/// library crate so it runs under `cargo test -p quicsrt`.
 #[test]
 fn adjust_eliminates_drift_not_doubles() {
     let start = Instant::now();

@@ -15,7 +15,7 @@ use srt_protocol::protocol::pending_connection::listen::Listen;
 use srt_protocol::protocol::pending_connection::ConnectionResult;
 use srt_protocol::settings::ConnInitSettings;
 
-use websrt::srt_sender::{SenderAction, SrtConfig, SrtInitiator};
+use quicsrt::srt_sender::{SenderAction, SrtConfig, SrtInitiator};
 
 const LOCAL: IpAddr = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
 const REMOTE: SocketAddr = SocketAddr::new(LOCAL, 9000);

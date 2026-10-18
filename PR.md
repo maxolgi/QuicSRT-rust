@@ -434,16 +434,16 @@ pub fn len(&self) -> usize { self.buffer.len() }
 
 ---
 
-## Not included in these PRs (WebSRT-specific features)
+## Not included in these PRs (QuicSRT-specific features)
 
-These patches are architecturally specific to WebSRT and would need careful
+These patches are architecturally specific to QuicSRT and would need careful
 consideration for upstream (they could be merged as opt-in features, but
 are less universally applicable):
 
 | Fork patch | What it does | Why not upstream yet |
 |---|---|---|
 | 1 (`web_time`) | `std::time::Instant` → `web_time::Instant` | Large mechanical diff (26 files). Best handled as a separate PR with `cfg` gates or a crate-level type alias. |
-| 7+8 (skip-induction) | `Listen::allow_skip_induction` + `Connect::new_skip_induction` | SRT-over-WebTransport specific. Upstream might prefer it as a feature flag. Clean API, well-tested in WebSRT. |
+| 7+8 (skip-induction) | `Listen::allow_skip_induction` + `Connect::new_skip_induction` | SRT-over-WebTransport specific. Upstream might prefer it as a feature flag. Clean API, well-tested in QuicSRT. |
 | 10 (CC-aware retransmit skip) | Skip NAK retransmits predicted to miss TSBPD deadline | Optimization, not a bug fix. Correct (packet is popped from lost list before the check), but bandwidth-saving only. |
 
 ---
@@ -462,4 +462,4 @@ are less universally applicable):
 | 8 | 4 (half) | Ergonomics: stats accessors | **Low** — convenience |
 
 PRs 1–6 are unambiguous upstream bugs that affect all srt-rs users, not just
-WebSRT. PRs 7–8 are improvements that benefit any embedding application.
+QuicSRT. PRs 7–8 are improvements that benefit any embedding application.

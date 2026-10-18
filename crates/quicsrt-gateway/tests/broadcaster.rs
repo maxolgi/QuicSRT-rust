@@ -1,4 +1,4 @@
-//! Integration tests for [`websrt::Broadcaster`] fanout behavior.
+//! Integration tests for [`quicsrt::Broadcaster`] fanout behavior.
 //!
 //! Covers: basic message delivery, viewer-cap enforcement, end-of-stream
 //! propagation, and slow-viewer lag handling.
@@ -9,12 +9,12 @@
 //! while the `Broadcaster` itself is still alive.
 
 use bytes::Bytes;
+use quicsrt::broadcaster::ViewerRxError;
+use quicsrt::ingest::Ingester;
+use quicsrt::Broadcaster;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::Notify;
-use websrt::broadcaster::ViewerRxError;
-use websrt::ingest::Ingester;
-use websrt::Broadcaster;
 
 /// Mock ingester: yields a fixed list of `(Instant, Bytes)` TS messages, then
 /// either signals end-of-stream (`Ok(None)`) or — when `block_forever` is set

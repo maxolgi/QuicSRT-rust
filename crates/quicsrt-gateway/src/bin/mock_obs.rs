@@ -2,8 +2,8 @@
 //! fixture .ts over SRT/UDP. Used to verify the SRT ingester without real OBS.
 //!
 //! Usage:
-//!   1. cargo run -p websrt-gateway -- --input srt --srt-port 9000
-//!   2. cargo run -p websrt-gateway --bin mock_obs -- --dst 127.0.0.1:9000
+//!   1. cargo run -p quicsrt-gateway -- --input srt --srt-port 9000
+//!   2. cargo run -p quicsrt-gateway --bin mock_obs -- --dst 127.0.0.1:9000
 
 use bytes::Bytes;
 use clap::Parser;
@@ -24,7 +24,7 @@ struct Cli {
 }
 
 const TS_PACKET: usize = 188;
-const PAYLOAD_BYTES: usize = websrt::srt_sender::PAYLOAD_SIZE as usize;
+const PAYLOAD_BYTES: usize = quicsrt::srt_sender::PAYLOAD_SIZE as usize;
 const PACKETS_PER_MESSAGE: usize = PAYLOAD_BYTES / TS_PACKET;
 
 #[tokio::main]

@@ -1,15 +1,15 @@
 [package]
-name = "websrt-gateway"
+name = "quicsrt-gateway"
 version.workspace = true
 edition.workspace = true
-default-run = "websrt-gateway"
+default-run = "quicsrt-gateway"
 license = "MPL-2.0"
 
 [features]
-sim-loss = ["websrt/sim-loss"]
+sim-loss = ["quicsrt/sim-loss"]
 
 [dependencies]
-websrt = { path = "../websrt" }
+quicsrt = { path = "../quicsrt" }
 clap.workspace = true
 tokio.workspace = true
 anyhow.workspace = true
@@ -39,7 +39,7 @@ windows-sys = { version = "0.59", features = ["Win32_System_Console"] }
 winresource = "0.1"
 
 [[bin]]
-name = "websrt-gateway"
+name = "quicsrt-gateway"
 path = "src/main.rs"
 
 [[bin]]
@@ -62,14 +62,14 @@ path = "src/bin/wt_hs_probe.rs"
 # `supervisor` is added because we ship a supervisord config but the
 # binary doesn't link against it (so $auto can't see it).
 [package.metadata.deb]
-maintainer = "WebSRT maintainers <https://github.com/maxolgi/WebSRT>"
+maintainer = "QuicSRT maintainers <https://github.com/maxolgi/QuicSRT>"
 copyright = "2026"
 license-file = ["../../LICENSE", "0"]
 section = "net"
 priority = "optional"
 depends = "$auto, supervisor"
 assets = [
-    ["target/release/websrt-gateway", "usr/bin/", "755"],
-    ["../../packaging/websrt.supervisor.conf", "etc/supervisor/conf.d/websrt.conf", "644"],
+    ["target/release/quicsrt-gateway", "usr/bin/", "755"],
+    ["../../packaging/quicsrt.supervisor.conf", "etc/supervisor/conf.d/quicsrt.conf", "644"],
 ]
 maintainer-scripts = "../../packaging/debian/"

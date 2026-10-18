@@ -20,7 +20,7 @@ fn main() {
     {
         let mut res = winresource::WindowsResource::new();
         res.set_icon("assets/icon.ico");
-        res.set("FileDescription", "WebSRT Gateway");
+        res.set("FileDescription", "QuicSRT Gateway");
         if let Err(e) = res.compile() {
             println!("cargo:warning=failed to embed Windows icon resource: {e}");
         }

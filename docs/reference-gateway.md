@@ -1,7 +1,7 @@
-# Reference Gateway (`websrt-gateway`)
+# Reference Gateway (`quicsrt-gateway`)
 
-Operations manual for the **`websrt-gateway`** application built on the
-[`websrt`](../crates/websrt) library — CLI options, certificate modes, and
+Operations manual for the **`quicsrt-gateway`** application built on the
+[`quicsrt`](../crates/quicsrt) library — CLI options, certificate modes, and
 production deployment. The binary is a demonstration of the library's surface,
 not the product itself; see the [README](../README.md#applications)
 for the library positioning.
@@ -13,7 +13,7 @@ for the library positioning.
 ## CLI reference
 
 ```
-websrt-gateway [OPTIONS]
+quicsrt-gateway [OPTIONS]
 
 Options:
       --no-gui                   Skip the GUI and run in headless CLI mode (original behavior)
@@ -59,7 +59,7 @@ Only with the `sim-loss` feature:
 ### Self-signed (default, `--cert-mode self`)
 
 Self-signed ECDSA P-256 certificate with SANs `localhost`, `127.0.0.1`, `::1`.
-Generated once, then persisted to `~/.config/websrt/gateway-cert.pem` +
+Generated once, then persisted to `~/.config/quicsrt/gateway-cert.pem` +
 `gateway-key.pem` and reused across restarts so the browser's cert exception /
 hash pinning stays stable. Delete those files to force regeneration. The DER
 SHA-256 hash is written to `web/public/cert-hash.js` at startup. The browser
@@ -78,7 +78,7 @@ Firefox. `cert-hash.js` is set to `null`.
 ```bash
 mkcert -install
 mkcert -cert-file certs/cert.pem -key-file certs/key.pem localhost 127.0.0.1 ::1
-cargo run -p websrt-gateway -- --cert-mode mkcert --cert-pem certs/cert.pem --key-pem certs/key.pem
+cargo run -p quicsrt-gateway -- --cert-mode mkcert --cert-pem certs/cert.pem --key-pem certs/key.pem
 ```
 
 See `certs/README.md` for details.
@@ -90,18 +90,18 @@ the supervisord config).
 
 ### Supervisord config
 
-Config file `websrt.conf` (repo root) is deployed to
+Config file `quicsrt.conf` (repo root) is deployed to
 `/etc/supervisor/conf.d/`:
 
 ```ini
-[program:websrt]
-command=/opt/WebSRT/target/release/websrt-gateway --no-gui --input srt --srt-mode listener --srt-port 9000 --bind 0.0.0.0 --web-bind 0.0.0.0 --latency 1000 --health-port 9090
-directory=/opt/WebSRT
+[program:quicsrt]
+command=/opt/QuicSRT/target/release/quicsrt-gateway --no-gui --input srt --srt-mode listener --srt-port 9000 --bind 0.0.0.0 --web-bind 0.0.0.0 --latency 1000 --health-port 9090
+directory=/opt/QuicSRT
 autostart=true
 autorestart=true
 startretries=3
-stdout_logfile=/var/log/websrt/gateway.out.log
-stderr_logfile=/var/log/websrt/gateway.err.log
+stdout_logfile=/var/log/quicsrt/gateway.out.log
+stderr_logfile=/var/log/quicsrt/gateway.err.log
 stdout_logfile_maxbytes=5MB
 stdout_logfile_backups=3
 stderr_logfile_maxbytes=5MB
@@ -109,18 +109,18 @@ stderr_logfile_backups=3
 environment=RUST_LOG="debug"
 ```
 
-A stock variant ships in `packaging/websrt.supervisor.conf` for packaged
-installs (binary at `/usr/bin/websrt-gateway`, working dir `/var/lib/websrt`);
+A stock variant ships in `packaging/quicsrt.supervisor.conf` for packaged
+installs (binary at `/usr/bin/quicsrt-gateway`, working dir `/var/lib/quicsrt`);
 `packaging/debian/` holds the Debian package scaffolding.
 
 ### Managing the service
 
 ```bash
 # After rebuilding the binary:
-sudo supervisorctl reread && sudo supervisorctl update && sudo supervisorctl restart websrt
+sudo supervisorctl reread && sudo supervisorctl update && sudo supervisorctl restart quicsrt
 
 # Check status:
-sudo supervisorctl status websrt
+sudo supervisorctl status quicsrt
 
 # Tail logs:
 tail -f logs/gateway.err.log

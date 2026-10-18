@@ -50,7 +50,7 @@ jobs:
       # Real WebTransport over loopback — the only test that exercises the full
       # handshake + data path (gated behind the `e2e` feature).
       - name: cargo test (e2e, real WebTransport loopback)
-        run: cargo test -p websrt --features e2e --test e2e -- --test-threads=1
+        run: cargo test -p quicsrt --features e2e --test e2e -- --test-threads=1
 
   # Note: tsc --noEmit is NOT in this job — the web TS imports WASM glue .js
   # files that are gitignored and only exist after ./build.sh wasm. Type-checking
@@ -70,16 +70,16 @@ jobs:
         include:
           - name: Linux x64
             os: ubuntu-latest
-            binary: websrt-gateway
-            artifact: websrt-gateway-linux-x64
+            binary: quicsrt-gateway
+            artifact: quicsrt-gateway-linux-x64
           - name: Windows x64
             os: windows-latest
-            binary: websrt-gateway.exe
-            artifact: websrt-gateway-windows-x64
+            binary: quicsrt-gateway.exe
+            artifact: quicsrt-gateway-windows-x64
           - name: macOS ARM
             os: macos-latest
-            binary: websrt-gateway
-            artifact: websrt-gateway-macos-arm64
+            binary: quicsrt-gateway
+            artifact: quicsrt-gateway-macos-arm64
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
@@ -132,7 +132,7 @@ jobs:
 
       # Step 3: gateway binary — embeds web/dist/ via rust-embed
       - name: Build gateway binary
-        run: cargo build --release -p websrt-gateway
+        run: cargo build --release -p quicsrt-gateway
 
       - name: Strip binary (Unix only)
         if: runner.os != 'Windows'
@@ -150,7 +150,7 @@ jobs:
         if: runner.os == 'Linux'
         uses: actions/upload-artifact@v7
         with:
-          name: websrt-web-dist
+          name: quicsrt-web-dist
           path: web/dist/
           if-no-files-found: error
 
@@ -161,13 +161,13 @@ jobs:
 
       - name: Build .deb package
         if: runner.os == 'Linux'
-        run: cargo deb -p websrt-gateway --no-build
+        run: cargo deb -p quicsrt-gateway --no-build
 
       - name: Upload .deb
         if: runner.os == 'Linux'
         uses: actions/upload-artifact@v7
         with:
-          name: websrt-gateway-deb
+          name: quicsrt-gateway-deb
           path: target/debian/*.deb
           if-no-files-found: error
 
@@ -195,11 +195,11 @@ jobs:
       - name: Stage release assets
         run: |
           mkdir -p release
-          cp artifacts/websrt-gateway-linux-x64/websrt-gateway      release/websrt-gateway-linux
-          cp artifacts/websrt-gateway-windows-x64/websrt-gateway.exe release/websrt-gateway-windows.exe
-          cp artifacts/websrt-gateway-macos-arm64/websrt-gateway     release/websrt-gateway-macos
-          cp artifacts/websrt-gateway-deb/*.deb release/
-          (cd artifacts/websrt-web-dist && zip -r "$GITHUB_WORKSPACE/release/websrt-web-dist.zip" .)
+          cp artifacts/quicsrt-gateway-linux-x64/quicsrt-gateway      release/quicsrt-gateway-linux
+          cp artifacts/quicsrt-gateway-windows-x64/quicsrt-gateway.exe release/quicsrt-gateway-windows.exe
+          cp artifacts/quicsrt-gateway-macos-arm64/quicsrt-gateway     release/quicsrt-gateway-macos
+          cp artifacts/quicsrt-gateway-deb/*.deb release/
+          (cd artifacts/quicsrt-web-dist && zip -r "$GITHUB_WORKSPACE/release/quicsrt-web-dist.zip" .)
 
       - name: Set release metadata
         id: meta

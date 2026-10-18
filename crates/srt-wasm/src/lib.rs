@@ -27,7 +27,7 @@ use std::time::Duration;
 use wasm_bindgen::prelude::*;
 
 /// SRT payload size: 1128 bytes (6 × 188-byte TS packets per SRT packet,
-/// TS-aligned). Must match `crates/websrt/src/srt_sender.rs`
+/// TS-aligned). Must match `crates/quicsrt/src/srt_sender.rs`
 /// `PAYLOAD_SIZE`; HSv5 negotiates `min(both)`.
 pub const PAYLOAD_SIZE: u64 = 1128;
 

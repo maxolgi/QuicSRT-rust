@@ -5,7 +5,7 @@
 //! policies that can be composed via [`chain`]:
 //!
 //! ```no_run
-//! use websrt::hooks::{SessionPolicy, path_policy, origin_allowlist_policy, auth_token_policy, chain};
+//! use quicsrt::hooks::{SessionPolicy, path_policy, origin_allowlist_policy, auth_token_policy, chain};
 //!
 //! fn my_policy() -> impl SessionPolicy {
 //!     chain(

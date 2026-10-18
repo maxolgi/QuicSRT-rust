@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Live test publisher — streams to the running WebSRT gateway (SRT 9000).
+# Live test publisher — streams to the running QuicSRT gateway (SRT 9000).
 #
 # Usage: ./fixtures/stream.sh [h264|av1]
 #   h264 (default): H.264 via NVENC (mirrors a typical OBS setup on this box).

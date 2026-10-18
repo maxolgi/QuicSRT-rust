@@ -9,10 +9,10 @@
 //!
 //! Run with:
 //! ```text
-//! cargo test -p websrt --features e2e --test e2e -- --nocapture --test-threads=1
+//! cargo test -p quicsrt --features e2e --test e2e -- --nocapture --test-threads=1
 //! ```
 //!
-//! Client-side SRT driving mirrors `crates/websrt-gateway/src/bin/wt_hs_probe.rs`.
+//! Client-side SRT driving mirrors `crates/quicsrt-gateway/src/bin/wt_hs_probe.rs`.
 
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::time::{Duration, Instant};
@@ -28,9 +28,9 @@ use tokio::sync::{mpsc, oneshot};
 use wtransport::tls::Sha256Digest;
 use wtransport::{ClientConfig, Connection, Endpoint};
 
-use websrt::cert::{Cert, CertSource};
-use websrt::ingest::TsMessage;
-use websrt::{Gateway, GatewayLimits};
+use quicsrt::cert::{Cert, CertSource};
+use quicsrt::ingest::TsMessage;
+use quicsrt::{Gateway, GatewayLimits};
 
 const LOCAL: IpAddr = IpAddr::V4(Ipv4Addr::LOCALHOST);
 /// Dummy peer address passed to the client-side SRT state machine. srt-protocol
@@ -335,7 +335,7 @@ async fn gateway_rejects_publish_to_live_stream() {
 /// lag the viewer fanout. Guards against head-of-line blocking in the
 /// centralized ticker at viewer counts far beyond the default cap.
 #[tokio::test]
-#[ignore = "real QUIC loopback — run locally: cargo test -p websrt --features e2e --test e2e -- --ignored"]
+#[ignore = "real QUIC loopback — run locally: cargo test -p quicsrt --features e2e --test e2e -- --ignored"]
 async fn ticker_stays_fast_with_many_viewers() {
     const N: usize = 50;
     init_tracing();

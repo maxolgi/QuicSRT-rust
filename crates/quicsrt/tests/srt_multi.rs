@@ -1,9 +1,9 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use quicsrt::ingest::SrtListenerService;
+use quicsrt::StreamRegistry;
 use tokio::sync::Notify;
-use websrt::ingest::SrtListenerService;
-use websrt::StreamRegistry;
 
 fn free_port() -> u16 {
     let socket = std::net::UdpSocket::bind("127.0.0.1:0").unwrap();

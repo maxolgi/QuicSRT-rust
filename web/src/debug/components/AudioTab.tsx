@@ -15,7 +15,7 @@ const SPEC_FLOOR = -80;
 const PEAK_HOLD_DB_PER_S = 12;
 const SPEC_PEAK_HOLD_DB_PER_FRAME = 0.5;
 
-export const AUDIO_CHANNEL_EVENT = 'websrt:audio-select-channel';
+export const AUDIO_CHANNEL_EVENT = 'quicsrt:audio-select-channel';
 
 const toDb = (lin: number): number => 20 * Math.log10((lin ?? 0) + 1e-12);
 const clamp01 = (v: number): number => (v < 0 ? 0 : v > 1 ? 1 : v);

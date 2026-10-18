@@ -12,7 +12,7 @@ use eframe::egui;
 use serde::{Deserialize, Serialize};
 use tokio::sync::Notify;
 
-use websrt::{GatewayStats, GatewayStatsHandle};
+use quicsrt::{GatewayStats, GatewayStatsHandle};
 
 use crate::log_buffer::LogBuffer;
 use crate::{CertMode, Cli};
@@ -89,7 +89,7 @@ fn opt_path(s: &str) -> Option<PathBuf> {
 impl GuiConfig {
     fn config_dir() -> std::path::PathBuf {
         let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-        std::path::PathBuf::from(format!("{home}/.config/websrt"))
+        std::path::PathBuf::from(format!("{home}/.config/quicsrt"))
     }
 
     fn config_path() -> std::path::PathBuf {
@@ -395,7 +395,7 @@ impl eframe::App for GuiApp {
         egui::CentralPanel::default().show(ctx, |ui| match self.tab {
             Tab::Gateway => {
                 ui.add_space(4.0);
-                ui.heading("WebSRT Gateway");
+                ui.heading("QuicSRT Gateway");
                 ui.add_space(6.0);
 
                 let editable = self.state == RunState::Stopped && self.msg_rx.is_none();

@@ -1,6 +1,6 @@
 #!/bin/bash 
 # Phase 0 PCM spike source — pushes SMPTE 302M (AES3) audio over SRT to the
-# running WebSRT gateway. Audio-only MPEG-2 TS, no video.
+# running QuicSRT gateway. Audio-only MPEG-2 TS, no video.
 #
 # Usage: ./fixtures/stream_pcm.sh [mono|stereo|surround|<channel_count>]
 #   mono (default): 440 Hz sine, single stereo PID (L=R).

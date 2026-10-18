@@ -731,8 +731,8 @@ impl GatewayBuilder {
     /// want to layer your policy on top of the built-ins.
     ///
     /// ```no_run
-    /// use websrt::Gateway;
-    /// use websrt::hooks::{chain, path_policy, auth_token_policy};
+    /// use quicsrt::Gateway;
+    /// use quicsrt::hooks::{chain, path_policy, auth_token_policy};
     /// use wtransport::Identity;
     ///
     /// # fn main() -> anyhow::Result<()> {
