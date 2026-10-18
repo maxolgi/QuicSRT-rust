@@ -35,7 +35,7 @@ Your bundler (Vite or webpack 5) resolves the worker and the WASM.
 
 ```sh
 # in your app repo
-git submodule add https://github.com/maxolgi/QuicSRT.git vendor/quicsrt
+git submodule add https://github.com/maxolgi/QuicSRT-rust.git vendor/quicsrt
 cd vendor/quicsrt
 ./build.sh wasm        # builds srt-wasm + mpeg2ts-wasm + ts-muxer-wasm
                        # → copies pkg/ into web/wasm/ (gitignored; required)

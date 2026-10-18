@@ -7,7 +7,7 @@ build tools — Debian/Ubuntu, Fedora, Arch, macOS):
 
     ./install-prereqs.sh           # idempotent; --check to verify only
     # or remotely, before cloning:
-    curl -sSf https://raw.githubusercontent.com/maxolgi/QuicSRT/master/install-prereqs.sh | bash
+    curl -sSf https://raw.githubusercontent.com/maxolgi/QuicSRT-rust/master/install-prereqs.sh | bash
 
 `./build.sh` wraps every common build step (`./build.sh --help` for the full menu):
 

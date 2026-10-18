@@ -62,7 +62,7 @@ path = "src/bin/wt_hs_probe.rs"
 # `supervisor` is added because we ship a supervisord config but the
 # binary doesn't link against it (so $auto can't see it).
 [package.metadata.deb]
-maintainer = "QuicSRT maintainers <https://github.com/maxolgi/QuicSRT>"
+maintainer = "QuicSRT maintainers <https://github.com/maxolgi/QuicSRT-rust>"
 copyright = "2026"
 license-file = ["../../LICENSE", "0"]
 section = "net"

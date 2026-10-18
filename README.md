@@ -62,7 +62,7 @@ SDK.
 
 ```toml
 [dependencies]
-quicsrt = { git = "https://github.com/maxolgi/QuicSRT.git", branch = "master" }
+quicsrt = { git = "https://github.com/maxolgi/QuicSRT-rust.git", branch = "master" }
 ```
 
 `quicsrt` builds on two patched forks, wired via `[patch.crates-io]`:
@@ -207,7 +207,7 @@ feature, the `rand` dependency is excluded.
 
 ```toml
 [dependencies]
-quicsrt = { git = "https://github.com/maxolgi/QuicSRT.git", branch = "master", features = ["sim-loss"] }
+quicsrt = { git = "https://github.com/maxolgi/QuicSRT-rust.git", branch = "master", features = ["sim-loss"] }
 ```
 
 ## Features
@@ -288,7 +288,7 @@ Detects what's already installed and only installs what's missing. Run
 curl'd directly on a fresh machine before cloning the repo:
 
 ```bash
-curl -sSf https://raw.githubusercontent.com/maxolgi/QuicSRT/master/install-prereqs.sh | bash
+curl -sSf https://raw.githubusercontent.com/maxolgi/QuicSRT-rust/master/install-prereqs.sh | bash
 ```
 
 #### Manual setup

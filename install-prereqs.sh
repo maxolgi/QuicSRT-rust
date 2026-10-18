@@ -10,7 +10,7 @@
 # After running this, run ./build.sh setup to build the WASM modules + npm install.
 #
 # Can be curl'd directly:
-#   curl -sSf https://raw.githubusercontent.com/maxolgi/QuicSRT/master/install-prereqs.sh | bash
+#   curl -sSf https://raw.githubusercontent.com/maxolgi/QuicSRT-rust/master/install-prereqs.sh | bash
 # (when piped, the script will not clone the repo for you — do that next)
 
 set -euo pipefail
