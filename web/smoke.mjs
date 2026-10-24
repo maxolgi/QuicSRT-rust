@@ -97,6 +97,7 @@ console.log('loaded:', {
     pcrPids: snap.pcrPids.length,
     nalPids: snap.nalPids.length,
     totalPes,
+    ringLen: snap.ringT.length,
     errorCount: snap.errorMsg.length,
   });
   if (snap.programNum < 0 || snap.pmtPid < 0) {
@@ -105,6 +106,10 @@ console.log('loaded:', {
   }
   if (snap.pids.length === 0) {
     console.error('FAIL: debug_snapshot has no pids');
+    process.exit(1);
+  }
+  if (snap.ringT.length === 0) {
+    console.error('FAIL: debug_snapshot packet ring empty');
     process.exit(1);
   }
   // Sanity: scrambling/af-control flat arrays are 4× the per-PID count.
