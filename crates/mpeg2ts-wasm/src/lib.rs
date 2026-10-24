@@ -28,32 +28,10 @@ mod nal;
 
 const TS_PACKET_SIZE: usize = 188;
 
-const PACKET_RING_CAP: usize = 500;
 const RECENT_ERRORS_CAP: usize = 20;
 const BYTES_WINDOW_BUCKETS: usize = 100; // 100 × ~100ms = 10s rolling window
 const BYTES_WINDOW_BUCKET_MS: f64 = 100.0;
 const PTS_JUMP_90K: i64 = 90_000; // >1s delta in 90kHz units flags a jump
-
-// PacketEntry.kind values mirrored into DebugSnapshot.ring_kind.
-const KIND_PAT: u8 = 0;
-const KIND_PMT: u8 = 1;
-const KIND_PES: u8 = 2;
-const KIND_RA: u8 = 3;
-const KIND_ERROR: u8 = 4;
-const KIND_OTHER: u8 = 255;
-
-// Hex-encode the first ≤512 bytes of a slice (≤1024 hex chars) to bound
-// per-ring-entry memory.
-const HEX_CAP_BYTES: usize = 512;
-
-fn hex_prefix(bytes: &[u8]) -> String {
-    let n = bytes.len().min(HEX_CAP_BYTES);
-    let mut s = String::with_capacity(n * 2);
-    for b in &bytes[..n] {
-        s.push_str(&format!("{:02x}", b));
-    }
-    s
-}
 
 // One PMT entry snapshot (pid + stream_type + descriptor format id).
 #[derive(Default, Clone)]
@@ -114,23 +92,6 @@ struct PcrStats {
     last_27mhz: u64, // 0 = no PCR seen yet on this PID
     interval_ms: f64,
     jitter_ms_ema: f64,
-}
-
-// One row in the rolling packet timeline. The ring is capped at
-// PACKET_RING_CAP entries (~30s of PES at typical OBS rates).
-#[derive(Clone)]
-struct PacketEntry {
-    t_ms: f64,
-    pid: u16,
-    kind: u8,
-    pts: i64,
-    dts: i64,
-    size: u32,
-    ra: bool,
-    nal_summary: Vec<u8>,
-    tei: bool,
-    pusi: bool,
-    hex: String,
 }
 
 /// Shared append-only buffer with read cursor, so the long-lived
@@ -467,14 +428,13 @@ pub struct TsDemuxer {
     nal_stats: HashMap<u16, nal::NalStats>,
     last_cc: HashMap<u16, u8>,
 
-    // Rings for the snapshot.
+    // Error ring for the snapshot.
     recent_errors: VecDeque<(f64, String)>,
-    packet_ring: VecDeque<PacketEntry>,
 
     // Audio metering (SMPTE 302M per-PID peak/RMS/LUFS/phase/FFT).
     meter_state: meter::MeterState,
 
-    // Clock anchor for t_ms in rings (ms since TsDemux construction).
+    // Clock anchor for t_ms in the error ring (ms since TsDemux construction).
     start_time: web_time::Instant,
 }
 
@@ -498,7 +458,6 @@ impl TsDemuxer {
             nal_stats: HashMap::new(),
             last_cc: HashMap::new(),
             recent_errors: VecDeque::new(),
-            packet_ring: VecDeque::new(),
             meter_state: meter::MeterState::default(),
             start_time: web_time::Instant::now(),
         }
@@ -592,31 +551,11 @@ impl TsDemuxer {
         self.start_time.elapsed().as_secs_f64() * 1000.0
     }
 
-    fn push_packet(&mut self, entry: PacketEntry) {
-        self.packet_ring.push_back(entry);
-        while self.packet_ring.len() > PACKET_RING_CAP {
-            self.packet_ring.pop_front();
-        }
-    }
-
     fn push_error(&mut self, t_ms: f64, msg: String) {
         self.recent_errors.push_back((t_ms, msg));
         while self.recent_errors.len() > RECENT_ERRORS_CAP {
             self.recent_errors.pop_front();
         }
-        self.push_packet(PacketEntry {
-            t_ms,
-            pid: 0,
-            kind: KIND_ERROR,
-            pts: -1,
-            dts: -1,
-            size: 0,
-            ra: false,
-            nal_summary: Vec::new(),
-            tei: false,
-            pusi: false,
-            hex: String::new(),
-        });
     }
 
     fn stream_type_for_pid(&self, pid: u16) -> Option<u8> {
@@ -657,7 +596,7 @@ impl TsDemuxer {
         stats.bytes_window_current = stats.bytes_window_current.saturating_add(n);
     }
 
-    // Update pid_stats + nal_stats + packet_ring for a fully-reassembled PES.
+    // Update pid_stats + nal_stats for a fully-reassembled PES.
     // The existing TsEvent::pes is still emitted (unchanged flow).
     fn finalize_pes(
         &mut self,
@@ -665,9 +604,6 @@ impl TsDemuxer {
         hdr: &PesHeader,
         payload: &[u8],
         ra: bool,
-        t_ms: f64,
-        tei: bool,
-        pusi: bool,
         events: &mut Vec<TsEvent>,
     ) {
         let pid_u16 = pid.as_u16();
@@ -696,7 +632,7 @@ impl TsDemuxer {
         // NAL classification for video PIDs only (H.264 0x1b / HEVC 0x24).
         // AV1 (OBU syntax) and audio PIDs carry no Annex-B NAL units.
         // Start codes are scanned ONCE here; the offsets + type codes are
-        // reused for both the TsEvent and the PacketEntry (no re-scan).
+        // reused for the TsEvent (no re-scan).
         let mut nal_offsets: Vec<u32> = Vec::new();
         let mut nal_types: Vec<u8> = Vec::new();
         if let Some(st) = self.stream_type_for_pid(pid_u16) {
@@ -728,14 +664,14 @@ impl TsDemuxer {
             }
         }
 
-        // Emit event with pre-parsed NAL data; clone types for the ring entry.
+        // Emit event with pre-parsed NAL data.
         events.push(TsEvent::pes(
             pid,
             hdr,
             payload.to_vec(),
             ra,
             nal_offsets,
-            nal_types.clone(),
+            nal_types,
         ));
 
         // SMPTE 302M: decode AES3 frames to f32 and emit a kind=5 pcm event.
@@ -751,20 +687,6 @@ impl TsDemuxer {
                 events.push(TsEvent::pcm(pid, pts, channel_count, samples));
             }
         }
-
-        self.push_packet(PacketEntry {
-            t_ms,
-            pid: pid_u16,
-            kind: KIND_PES,
-            pts,
-            dts,
-            size: payload.len() as u32,
-            ra,
-            nal_summary: nal_types,
-            tei,
-            pusi,
-            hex: hex_prefix(payload),
-        });
     }
 
     fn handle_packet(&mut self, packet: &TsPacket, events: &mut Vec<TsEvent>) {
@@ -844,19 +766,6 @@ impl TsDemuxer {
                     stats.last_ra_ms = elapsed_ms;
                 }
                 events.push(TsEvent::random_access(pid));
-                self.push_packet(PacketEntry {
-                    t_ms: elapsed_ms,
-                    pid: pid_u16,
-                    kind: KIND_RA,
-                    pts: -1,
-                    dts: -1,
-                    size: 0,
-                    ra: true,
-                    nal_summary: Vec::new(),
-                    tei,
-                    pusi,
-                    hex: String::new(),
-                });
             }
         }
 
@@ -884,23 +793,10 @@ impl TsDemuxer {
                     self.program_num = Some(pa.program_num);
                     self.pmt_pid = Some(pa.program_map_pid.as_u16());
                     events.push(TsEvent::pat(pa.program_num, pa.program_map_pid.as_u16()));
-                    self.push_packet(PacketEntry {
-                        t_ms: elapsed_ms,
-                        pid: pid_u16,
-                        kind: KIND_PAT,
-                        pts: -1,
-                        dts: -1,
-                        size: 0,
-                        ra: false,
-                        nal_summary: Vec::new(),
-                        tei,
-                        pusi,
-                        hex: String::new(),
-                    });
                 }
             }
             TsPayload::Pmt(pmt) => {
-                self.handle_pmt(&pmt, elapsed_ms, tei, pusi, events);
+                self.handle_pmt(&pmt, events);
             }
             TsPayload::PesStart(pes) => {
                 let pes_payload_len = pes.data.len();
@@ -933,9 +829,9 @@ impl TsDemuxer {
                 self.accumulate_bytes(pid_u16, pes_payload_len as u64, now);
 
                 if let Some((hdr, payload, ra)) = flushed {
-                    self.finalize_pes(pid, &hdr, &payload, ra, elapsed_ms, tei, pusi, events);
+                    self.finalize_pes(pid, &hdr, &payload, ra, events);
                 }
-                self.maybe_flush(pid, elapsed_ms, tei, pusi, events);
+                self.maybe_flush(pid, events);
             }
             TsPayload::PesContinuation(bytes) => {
                 let n = bytes.len() as u64;
@@ -943,56 +839,22 @@ impl TsDemuxer {
                     p.buf.extend_from_slice(bytes);
                 }
                 self.accumulate_bytes(pid_u16, n, now);
-                self.maybe_flush(pid, elapsed_ms, tei, pusi, events);
+                self.maybe_flush(pid, events);
             }
             TsPayload::Raw(bytes) => {
                 if self.pmt_pid == Some(pid_u16) {
                     if let Some(pmt) = assemble_psi(&mut self.partial_psi, pid_u16, bytes, pusi) {
-                        self.handle_pmt(&pmt, elapsed_ms, tei, pusi, events);
+                        self.handle_pmt(&pmt, events);
                     }
                 }
-                self.push_packet(PacketEntry {
-                    t_ms: elapsed_ms,
-                    pid: pid_u16,
-                    kind: KIND_OTHER,
-                    pts: -1,
-                    dts: -1,
-                    size: 0,
-                    ra: false,
-                    nal_summary: Vec::new(),
-                    tei,
-                    pusi,
-                    hex: String::new(),
-                });
             }
             TsPayload::Null(_) | TsPayload::Section(_) => {
-                // ignore payload, but still record a timeline row for visibility.
-                self.push_packet(PacketEntry {
-                    t_ms: elapsed_ms,
-                    pid: pid_u16,
-                    kind: KIND_OTHER,
-                    pts: -1,
-                    dts: -1,
-                    size: 0,
-                    ra: false,
-                    nal_summary: Vec::new(),
-                    tei,
-                    pusi,
-                    hex: String::new(),
-                });
+                // ignore payload
             }
         }
     }
 
-    fn handle_pmt(
-        &mut self,
-        pmt: &Pmt,
-        elapsed_ms: f64,
-        tei: bool,
-        pusi: bool,
-        events: &mut Vec<TsEvent>,
-    ) {
-        let pmt_pid = self.pmt_pid.unwrap_or(0x1000);
+    fn handle_pmt(&mut self, pmt: &Pmt, events: &mut Vec<TsEvent>) {
         let mut new_entries: Vec<PmtEntry> = Vec::with_capacity(pmt.es_info.len());
         let mut entries: Vec<(Pid, StreamType)> = Vec::with_capacity(pmt.es_info.len());
         for e in &pmt.es_info {
@@ -1009,29 +871,9 @@ impl TsDemuxer {
         self.pmt_entries = new_entries;
 
         events.push(TsEvent::pmt(&entries, &format_ids));
-        self.push_packet(PacketEntry {
-            t_ms: elapsed_ms,
-            pid: pmt_pid,
-            kind: KIND_PMT,
-            pts: -1,
-            dts: -1,
-            size: 0,
-            ra: false,
-            nal_summary: Vec::new(),
-            tei,
-            pusi,
-            hex: String::new(),
-        });
     }
 
-    fn maybe_flush(
-        &mut self,
-        pid: Pid,
-        elapsed_ms: f64,
-        tei: bool,
-        pusi: bool,
-        events: &mut Vec<TsEvent>,
-    ) {
+    fn maybe_flush(&mut self, pid: Pid, events: &mut Vec<TsEvent>) {
         let flush = match self.partials.get(&pid) {
             Some(p) => match p.declared_len {
                 Some(n) => p.buf.len() >= n,
@@ -1056,9 +898,8 @@ impl TsDemuxer {
             let ra = std::mem::take(&mut p.ra);
             // Bytes already counted incrementally as they arrived; the bitrate
             // ring gates bucket rotation inside accumulate_bytes, which
-            // finalize_pes doesn't need, so we pass `elapsed_ms` for the
-            // timeline stamp.
-            self.finalize_pes(pid, &hdr, &payload, ra, elapsed_ms, tei, pusi, events);
+            // finalize_pes doesn't need.
+            self.finalize_pes(pid, &hdr, &payload, ra, events);
         }
     }
 }
@@ -1079,8 +920,6 @@ impl Default for TsDemuxer {
 ///     (`pesCounts`, `byteTotals`, `bitratesMbps`, …) are parallel to it.
 ///   - `scramblingCounts` / `afControlCounts` are flat 4×N (4 values per PID).
 ///   - `nalStats` is flat 9×M (9 values per video PID: I/P/B/IDR/SPS/PPS/SEI/AUD/NonIDR).
-///   - `ringNalOffsets` has N+1 entries; packet i's NAL types are
-///     `ringNal[offsets[i] .. offsets[i+1]]`.
 #[wasm_bindgen]
 pub struct DebugSnapshot {
     program_num: i32,
@@ -1112,19 +951,6 @@ pub struct DebugSnapshot {
 
     error_t: Vec<f64>,
     error_msg: Vec<String>,
-
-    ring_t: Vec<f64>,
-    ring_pid: Vec<u16>,
-    ring_kind: Vec<u8>,
-    ring_pts: Vec<f64>,
-    ring_dts: Vec<f64>,
-    ring_size: Vec<f64>,
-    ring_ra: Vec<u8>,
-    ring_tei: Vec<u8>,
-    ring_pusi: Vec<u8>,
-    ring_nal: Vec<u8>,
-    ring_nal_offsets: Vec<u32>,
-    ring_hex: Vec<String>,
 }
 
 #[wasm_bindgen]
@@ -1232,55 +1058,6 @@ impl DebugSnapshot {
     #[wasm_bindgen(getter, js_name = errorMsg)]
     pub fn error_msg(&self) -> Vec<String> {
         self.error_msg.clone()
-    }
-
-    #[wasm_bindgen(getter, js_name = ringT)]
-    pub fn ring_t(&self) -> Vec<f64> {
-        self.ring_t.clone()
-    }
-    #[wasm_bindgen(getter, js_name = ringPid)]
-    pub fn ring_pid(&self) -> Vec<u16> {
-        self.ring_pid.clone()
-    }
-    #[wasm_bindgen(getter, js_name = ringKind)]
-    pub fn ring_kind(&self) -> Vec<u8> {
-        self.ring_kind.clone()
-    }
-    #[wasm_bindgen(getter, js_name = ringPts)]
-    pub fn ring_pts(&self) -> Vec<f64> {
-        self.ring_pts.clone()
-    }
-    #[wasm_bindgen(getter, js_name = ringDts)]
-    pub fn ring_dts(&self) -> Vec<f64> {
-        self.ring_dts.clone()
-    }
-    #[wasm_bindgen(getter, js_name = ringSize)]
-    pub fn ring_size(&self) -> Vec<f64> {
-        self.ring_size.clone()
-    }
-    #[wasm_bindgen(getter, js_name = ringRa)]
-    pub fn ring_ra(&self) -> Vec<u8> {
-        self.ring_ra.clone()
-    }
-    #[wasm_bindgen(getter, js_name = ringTei)]
-    pub fn ring_tei(&self) -> Vec<u8> {
-        self.ring_tei.clone()
-    }
-    #[wasm_bindgen(getter, js_name = ringPusi)]
-    pub fn ring_pusi(&self) -> Vec<u8> {
-        self.ring_pusi.clone()
-    }
-    #[wasm_bindgen(getter, js_name = ringNal)]
-    pub fn ring_nal(&self) -> Vec<u8> {
-        self.ring_nal.clone()
-    }
-    #[wasm_bindgen(getter, js_name = ringNalOffsets)]
-    pub fn ring_nal_offsets(&self) -> Vec<u32> {
-        self.ring_nal_offsets.clone()
-    }
-    #[wasm_bindgen(getter, js_name = ringHex)]
-    pub fn ring_hex(&self) -> Vec<String> {
-        self.ring_hex.clone()
     }
 }
 
@@ -1459,35 +1236,6 @@ impl TsDemuxer {
             error_msg.push(msg.clone());
         }
 
-        let ring_len = self.packet_ring.len();
-        let mut ring_t = Vec::with_capacity(ring_len);
-        let mut ring_pid = Vec::with_capacity(ring_len);
-        let mut ring_kind = Vec::with_capacity(ring_len);
-        let mut ring_pts = Vec::with_capacity(ring_len);
-        let mut ring_dts = Vec::with_capacity(ring_len);
-        let mut ring_size = Vec::with_capacity(ring_len);
-        let mut ring_ra = Vec::with_capacity(ring_len);
-        let mut ring_tei = Vec::with_capacity(ring_len);
-        let mut ring_pusi = Vec::with_capacity(ring_len);
-        let mut ring_nal = Vec::new();
-        let mut ring_nal_offsets = Vec::with_capacity(ring_len + 1);
-        let mut ring_hex = Vec::with_capacity(ring_len);
-        ring_nal_offsets.push(0);
-        for e in &self.packet_ring {
-            ring_t.push(e.t_ms);
-            ring_pid.push(e.pid);
-            ring_kind.push(e.kind);
-            ring_pts.push(if e.pts < 0 { -1.0 } else { e.pts as f64 });
-            ring_dts.push(if e.dts < 0 { -1.0 } else { e.dts as f64 });
-            ring_size.push(e.size as f64);
-            ring_ra.push(e.ra as u8);
-            ring_tei.push(e.tei as u8);
-            ring_pusi.push(e.pusi as u8);
-            ring_nal.extend_from_slice(&e.nal_summary);
-            ring_nal_offsets.push(ring_nal.len() as u32);
-            ring_hex.push(e.hex.clone());
-        }
-
         DebugSnapshot {
             program_num: self.program_num.map(|n| n as i32).unwrap_or(-1),
             pmt_pid: self.pmt_pid.map(|n| n as i32).unwrap_or(-1),
@@ -1514,18 +1262,6 @@ impl TsDemuxer {
             nal_stats: nal_stats_flat,
             error_t,
             error_msg,
-            ring_t,
-            ring_pid,
-            ring_kind,
-            ring_pts,
-            ring_dts,
-            ring_size,
-            ring_ra,
-            ring_tei,
-            ring_pusi,
-            ring_nal,
-            ring_nal_offsets,
-            ring_hex,
         }
     }
 
